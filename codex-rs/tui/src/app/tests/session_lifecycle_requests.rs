@@ -4553,7 +4553,7 @@ async fn external_writer_escape_preserves_snapshot_and_explicit_quits() -> Resul
 }
 
 #[tokio::test]
-async fn command_center_read_only_open_requests_and_failure_preservation() -> Result<()> {
+async fn command_center_shared_writer_open_requests_and_failure_preservation() -> Result<()> {
     for (history_capabilities, saved_turn_count) in [
         (HistoryCapabilities::Current, 0usize),
         (HistoryCapabilities::ReadAfterResumeFails, 0),
@@ -4704,11 +4704,16 @@ async fn command_center_read_only_open_requests_and_failure_preservation() -> Re
             app.chat_widget.handle_key_event(KeyCode::Esc.into());
             assert_eq!(render_bottom_popup(&app.chat_widget, /*width*/ 96), before);
         } else {
-            assert_eq!(app.current_displayed_thread_id(), Some(thread_id));
-            assert!(app.chat_widget.is_external_writer_view());
+            assert_eq!(
+                app.current_displayed_thread_id(),
+                Some(thread_id),
+                "{history_capabilities:?}: {}",
+                render_bottom_popup(&app.chat_widget, /*width*/ 96)
+            );
+            assert!(!app.chat_widget.is_external_writer_view());
             assert_eq!(
                 app.thread_event_channels[&thread_id].attachment(),
-                ThreadEventAttachment::ExternalWriter
+                ThreadEventAttachment::Live
             );
             let turns = app.thread_event_channels[&thread_id]
                 .store

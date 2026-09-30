@@ -311,16 +311,16 @@ async fn thread_resume_paginated_model_context_preserves_original_metadata() -> 
 }
 
 #[tokio::test]
-async fn thread_resume_rejects_legacy_writer_owned_by_another_process() -> Result<()> {
-    assert_thread_resume_rejects_writer_owned_by_another_process(ThreadHistoryMode::Legacy).await
+async fn thread_resume_allows_legacy_writer_owned_by_another_process() -> Result<()> {
+    assert_thread_resume_allows_writer_owned_by_another_process(ThreadHistoryMode::Legacy).await
 }
 
 #[tokio::test]
-async fn thread_resume_rejects_paginated_writer_owned_by_another_process() -> Result<()> {
-    assert_thread_resume_rejects_writer_owned_by_another_process(ThreadHistoryMode::Paginated).await
+async fn thread_resume_allows_paginated_writer_owned_by_another_process() -> Result<()> {
+    assert_thread_resume_allows_writer_owned_by_another_process(ThreadHistoryMode::Paginated).await
 }
 
-async fn assert_thread_resume_rejects_writer_owned_by_another_process(
+async fn assert_thread_resume_allows_writer_owned_by_another_process(
     history_mode: ThreadHistoryMode,
 ) -> Result<()> {
     let server = create_mock_responses_server_repeating_assistant("Done").await;
@@ -351,14 +351,8 @@ async fn assert_thread_resume_rejects_writer_owned_by_another_process(
     )
     .await??;
 
-    let secondary_sqlite_home = TempDir::new()?;
-    let secondary_sqlite_home_path = secondary_sqlite_home.path().to_string_lossy();
     let mut secondary = TestAppServer::builder()
         .with_codex_home(codex_home.path())
-        .with_env_overrides(&[(
-            "CODEX_SQLITE_HOME",
-            Some(secondary_sqlite_home_path.as_ref()),
-        )])
         .build_initialized()
         .await?;
     let resume_id = secondary
@@ -367,30 +361,8 @@ async fn assert_thread_resume_rejects_writer_owned_by_another_process(
             ..Default::default()
         })
         .await?;
-    let error = timeout(
-        DEFAULT_READ_TIMEOUT,
-        secondary.read_stream_until_error_message(RequestId::Integer(resume_id)),
-    )
-    .await??;
-    assert_eq!(error.error.code, -32600);
-    assert_eq!(
-        error.error.message,
-        format!("thread {} already has an active writer", thread.id)
-    );
-
-    timeout(DEFAULT_READ_TIMEOUT, primary.shutdown_gracefully()).await??;
-
-    let next_resume_id = secondary
-        .send_thread_resume_request(ThreadResumeParams {
-            thread_id: thread.id.clone(),
-            ..Default::default()
-        })
-        .await?;
-    let _: ThreadResumeResponse = timeout(
-        DEFAULT_READ_TIMEOUT,
-        secondary.read_response(next_resume_id),
-    )
-    .await??;
+    let _: ThreadResumeResponse =
+        timeout(DEFAULT_READ_TIMEOUT, secondary.read_response(resume_id)).await??;
     timeout(
         DEFAULT_READ_TIMEOUT,
         secondary.start_turn_and_wait_for_completion(TurnStartParams {
@@ -404,6 +376,36 @@ async fn assert_thread_resume_rejects_writer_owned_by_another_process(
     )
     .await??;
 
+    timeout(
+        DEFAULT_READ_TIMEOUT,
+        primary.start_turn_and_wait_for_completion(TurnStartParams {
+            thread_id: thread.id.clone(),
+            input: vec![UserInput::Text {
+                text: "first writer after shared resume".to_string(),
+                text_elements: Vec::new(),
+            }],
+            ..Default::default()
+        }),
+    )
+    .await??;
+
+    if matches!(history_mode, ThreadHistoryMode::Paginated) {
+        let turns_id = secondary
+            .send_thread_turns_list_request(ThreadTurnsListParams {
+                thread_id: thread.id,
+                cursor: None,
+                limit: Some(10),
+                sort_direction: Some(SortDirection::Asc),
+                items_view: Some(TurnItemsView::NotLoaded),
+            })
+            .await?;
+        let turns: ThreadTurnsListResponse =
+            timeout(DEFAULT_READ_TIMEOUT, secondary.read_response(turns_id)).await??;
+        assert_eq!(turns.data.len(), 3);
+    }
+
+    timeout(DEFAULT_READ_TIMEOUT, secondary.shutdown_gracefully()).await??;
+    timeout(DEFAULT_READ_TIMEOUT, primary.shutdown_gracefully()).await??;
     Ok(())
 }
 

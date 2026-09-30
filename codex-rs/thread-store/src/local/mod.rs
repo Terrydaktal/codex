@@ -349,6 +349,23 @@ impl LocalThreadStore {
             })
     }
 
+    fn acquire_live_writer_lock(&self, thread_id: ThreadId) -> ThreadStoreResult<WriterLockGuard> {
+        self.writer_lock_coordinator
+            .acquire_live(thread_id)
+            .map(Arc::new)
+            .map_err(|err| {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    ThreadStoreError::Conflict {
+                        message: err.to_string(),
+                    }
+                } else {
+                    ThreadStoreError::Internal {
+                        message: err.to_string(),
+                    }
+                }
+            })
+    }
+
     async fn acquire_writer_locks(
         &self,
         thread_ids: &[ThreadId],
@@ -1588,11 +1605,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn live_writers_reject_cross_process_create_and_resume() {
+    async fn live_writers_reject_cross_process_create_and_allow_resume() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
         let primary = LocalThreadStore::new(config.clone(), /*state_db*/ None);
         let secondary = LocalThreadStore::new(config, /*state_db*/ None);
+        let turn_started = |turn_id: &str| {
+            RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
+                turn_id: turn_id.to_string(),
+                root_turn_id: None,
+                trace_id: None,
+                started_at: None,
+                model_context_window: None,
+                collaboration_mode_kind: Default::default(),
+            }))
+        };
 
         for history_mode in [ThreadHistoryMode::Legacy, ThreadHistoryMode::Paginated] {
             let thread_id = ThreadId::default();
@@ -1613,7 +1640,7 @@ mod tests {
                 .expect("load rollout path");
             let resume_params = ResumeThreadParams {
                 thread_id,
-                rollout_path: Some(rollout_path),
+                rollout_path: Some(rollout_path.clone()),
                 history: None,
                 include_archived: true,
                 metadata: thread_metadata(),
@@ -1625,20 +1652,62 @@ mod tests {
                 .expect_err("competing create should fail");
             assert!(matches!(error, ThreadStoreError::Conflict { .. }));
 
-            let error = secondary
-                .resume_thread(resume_params.clone())
+            secondary
+                .resume_thread(resume_params)
                 .await
-                .expect_err("competing resume should fail");
-            assert!(matches!(error, ThreadStoreError::Conflict { .. }));
+                .expect("competing process should share live writer ownership");
+
+            primary
+                .append_items(AppendThreadItemsParams {
+                    thread_id,
+                    items: vec![turn_started("primary-after-shared-resume")],
+                })
+                .await
+                .expect("append from primary writer");
+            secondary
+                .append_items(AppendThreadItemsParams {
+                    thread_id,
+                    items: vec![turn_started("secondary-shared-write")],
+                })
+                .await
+                .expect("append from secondary writer");
+            primary
+                .append_items(AppendThreadItemsParams {
+                    thread_id,
+                    items: vec![turn_started("primary-stale-writer-refresh")],
+                })
+                .await
+                .expect("append from primary writer after secondary");
+
+            let (items, _, _) = RolloutRecorder::load_rollout_items(rollout_path.as_path())
+                .await
+                .expect("load concurrently written rollout");
+            let turn_ids = items
+                .iter()
+                .filter_map(|item| match item {
+                    RolloutItem::EventMsg(EventMsg::TurnStarted(event)) => {
+                        Some(event.turn_id.as_str())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                turn_ids,
+                vec![
+                    "primary-after-shared-resume",
+                    "secondary-shared-write",
+                    "primary-stale-writer-refresh",
+                ]
+            );
 
             primary
                 .shutdown_thread(thread_id)
                 .await
-                .expect("shutdown should release writer ownership");
+                .expect("shutdown primary writer");
             secondary
-                .resume_thread(resume_params)
+                .shutdown_thread(thread_id)
                 .await
-                .expect("resume after shutdown should acquire writer ownership");
+                .expect("shutdown secondary writer");
         }
     }
 

@@ -213,16 +213,16 @@ async fn external_writer_fork_opens_editable_thread_without_taking_source_lease(
         app.chat_widget.composer_text_with_pending(),
         "Retained draftEditable fork"
     );
-    let error = server
+    let shared = server
         .resume_thread(
             &app.local_settings,
             app.config.clone(),
             thread_id,
             app.resume_model_settings(),
         )
-        .await
-        .expect_err("source still has its original writer");
-    assert!(crate::app_server_session::is_active_writer_error(&error));
+        .await?;
+    assert_eq!(shared.session.thread_id, thread_id);
+    assert!(serde_json::to_string(&shared.turns)?.contains("Saved user message"));
     owner.shutdown().await?;
     server.shutdown().await?;
     proxy.await??;

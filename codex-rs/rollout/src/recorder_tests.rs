@@ -33,6 +33,8 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -829,6 +831,283 @@ async fn rollout_id_preserves_session_meta_thread_id() -> std::io::Result<()> {
 }
 
 #[tokio::test]
+async fn paginated_recorders_refresh_ordinals_before_each_write() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let config = test_config(home.path());
+    let recorder = RolloutRecorder::new(
+        &config,
+        RolloutRecorderParams::new(
+            ThreadId::new(),
+            /*forked_from_id*/ None,
+            /*parent_thread_id*/ None,
+            SessionSource::Exec,
+            /*thread_source*/ None,
+            "test_originator".to_string(),
+            BaseInstructions::default(),
+            Vec::new(),
+        )
+        .with_history_mode(ThreadHistoryMode::Paginated),
+    )
+    .await?;
+    let rollout_path = recorder.rollout_path().to_path_buf();
+    recorder.persist().await?;
+    let second =
+        RolloutRecorder::new(&config, RolloutRecorderParams::resume(rollout_path.clone())).await?;
+
+    recorder
+        .record_canonical_items(&[agent_message_item("first writer")])
+        .await?;
+    recorder.flush().await?;
+    second
+        .record_canonical_items(&[agent_message_item("second writer")])
+        .await?;
+    second.flush().await?;
+    recorder
+        .record_canonical_items(&[agent_message_item("first writer again")])
+        .await?;
+    recorder.flush().await?;
+    recorder.shutdown().await?;
+    second.shutdown().await?;
+
+    assert_eq!(
+        read_rollout_lines(&rollout_path)?
+            .into_iter()
+            .map(|line| line.ordinal)
+            .collect::<Vec<_>>(),
+        vec![Some(0), Some(1), Some(2), Some(3)]
+    );
+    Ok(())
+}
+
+#[test]
+fn paginated_ordinal_refresh_accepts_persisted_token_count() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let rollout_path = home.path().join("rollout.jsonl");
+    write_paginated_rollout(&rollout_path, ThreadId::new(), &[15])?;
+    let token_count = serde_json::json!({
+        "timestamp": "2026-09-04T21:42:04.282Z",
+        "ordinal": 16,
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "total_token_usage": {
+                    "input_tokens": 17021,
+                    "cached_input_tokens": 11904,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 144,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 17165
+                },
+                "last_token_usage": {
+                    "input_tokens": 17021,
+                    "cached_input_tokens": 11904,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 144,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 17165
+                },
+                "model_context_window": 258400
+            },
+            "rate_limits": {
+                "limit_id": "codex",
+                "limit_name": null,
+                "primary": {
+                    "used_percent": 25.0,
+                    "window_minutes": 10080,
+                    "resets_at": 1789119370
+                },
+                "secondary": null,
+                "credits": {
+                    "has_credits": false,
+                    "unlimited": false,
+                    "balance": "0"
+                },
+                "individual_limit": null,
+                "spend_control_reached": null,
+                "plan_type": "pro",
+                "rate_limit_reached_type": null
+            },
+            "account_id": "account",
+            "model": "gpt-6-astra",
+            "service_tier": "default"
+        }
+    });
+    let mut file = fs::OpenOptions::new().append(true).open(&rollout_path)?;
+    writeln!(file, "{token_count}")?;
+    drop(file);
+
+    let mut file = File::open(&rollout_path)?;
+    let state = ordinal_state_for_rollout(&mut file, &rollout_path)?;
+
+    assert_eq!(state.current()?, Some(17));
+    Ok(())
+}
+
+#[tokio::test]
+async fn paginated_recorders_serialize_concurrent_writes() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let config = test_config(home.path());
+    let first = RolloutRecorder::new(
+        &config,
+        RolloutRecorderParams::new(
+            ThreadId::new(),
+            /*forked_from_id*/ None,
+            /*parent_thread_id*/ None,
+            SessionSource::Exec,
+            /*thread_source*/ None,
+            "test_originator".to_string(),
+            BaseInstructions::default(),
+            Vec::new(),
+        )
+        .with_history_mode(ThreadHistoryMode::Paginated),
+    )
+    .await?;
+    let rollout_path = first.rollout_path().to_path_buf();
+    first.persist().await?;
+    let second =
+        RolloutRecorder::new(&config, RolloutRecorderParams::resume(rollout_path.clone())).await?;
+
+    for index in 0..100 {
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let append = |recorder: RolloutRecorder,
+                      writer: &'static str,
+                      barrier: Arc<tokio::sync::Barrier>| async move {
+            barrier.wait().await;
+            recorder
+                .record_canonical_items(&[agent_message_item(format!("{writer}-{index}").as_str())])
+                .await?;
+            recorder.flush().await
+        };
+        let (first_result, second_result) = tokio::join!(
+            append(first.clone(), "first", Arc::clone(&barrier)),
+            append(second.clone(), "second", barrier),
+        );
+        first_result?;
+        second_result?;
+    }
+
+    first.shutdown().await?;
+    second.shutdown().await?;
+    let ordinals = read_rollout_lines(&rollout_path)?
+        .into_iter()
+        .map(|line| line.ordinal)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ordinals,
+        (0..ordinals.len() as u64).map(Some).collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
+#[test]
+fn paginated_recorder_cross_process_helper() {
+    let Ok(rollout_path) = std::env::var("CODEX_TEST_PAGINATED_ROLLOUT_PATH") else {
+        return;
+    };
+    let home =
+        PathBuf::from(std::env::var("CODEX_TEST_PAGINATED_HOME").expect("cross-process test home"));
+    let writer = std::env::var("CODEX_TEST_PAGINATED_WRITER").expect("writer name");
+    let ready_path = home.join(format!("{writer}.ready"));
+    let start_path = home.join("start");
+    fs::write(ready_path, []).expect("signal child readiness");
+    while !start_path.exists() {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("child runtime")
+        .block_on(async move {
+            let config = test_config(home.as_path());
+            let recorder = RolloutRecorder::new(
+                &config,
+                RolloutRecorderParams::resume(PathBuf::from(rollout_path)),
+            )
+            .await
+            .expect("resume rollout in child");
+            for index in 0..100 {
+                recorder
+                    .record_canonical_items(&[agent_message_item(
+                        format!("{writer}-{index}").as_str(),
+                    )])
+                    .await
+                    .expect("queue child item");
+                recorder.flush().await.expect("flush child item");
+            }
+            recorder.shutdown().await.expect("shutdown child recorder");
+        });
+}
+
+#[tokio::test]
+async fn paginated_recorders_serialize_cross_process_writes() -> std::io::Result<()> {
+    let home = TempDir::new().expect("temp dir");
+    let config = test_config(home.path());
+    let recorder = RolloutRecorder::new(
+        &config,
+        RolloutRecorderParams::new(
+            ThreadId::new(),
+            /*forked_from_id*/ None,
+            /*parent_thread_id*/ None,
+            SessionSource::Exec,
+            /*thread_source*/ None,
+            "test_originator".to_string(),
+            BaseInstructions::default(),
+            Vec::new(),
+        )
+        .with_history_mode(ThreadHistoryMode::Paginated),
+    )
+    .await?;
+    let rollout_path = recorder.rollout_path().to_path_buf();
+    recorder.persist().await?;
+    recorder.shutdown().await?;
+
+    let test_executable = std::env::current_exe().expect("current test executable");
+    let spawn_child = |writer: &str| {
+        Command::new(test_executable.as_path())
+            .arg("paginated_recorder_cross_process_helper")
+            .arg("--nocapture")
+            .env("CODEX_TEST_PAGINATED_ROLLOUT_PATH", &rollout_path)
+            .env("CODEX_TEST_PAGINATED_HOME", home.path())
+            .env("CODEX_TEST_PAGINATED_WRITER", writer)
+            .spawn()
+            .expect("spawn rollout writer child")
+    };
+    let mut first = spawn_child("first");
+    let mut second = spawn_child("second");
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !home.path().join("first.ready").exists()
+            || !home.path().join("second.ready").exists()
+        {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("children should become ready");
+    fs::write(home.path().join("start"), [])?;
+
+    let first_status = tokio::task::spawn_blocking(move || first.wait())
+        .await
+        .expect("join first child")?;
+    let second_status = tokio::task::spawn_blocking(move || second.wait())
+        .await
+        .expect("join second child")?;
+    assert!(first_status.success());
+    assert!(second_status.success());
+
+    let ordinals = read_rollout_lines(&rollout_path)?
+        .into_iter()
+        .map(|line| line.ordinal)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ordinals,
+        (0..ordinals.len() as u64).map(Some).collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn recorder_omits_ordinals_from_legacy_rollouts() -> std::io::Result<()> {
     let home = TempDir::new().expect("temp dir");
     let config = test_config(home.path());
@@ -958,6 +1237,7 @@ async fn writer_state_retries_write_error_before_reporting_flush_success() -> st
         cwd: home.path().to_path_buf(),
         rollout_path: rollout_path.clone(),
         ordinal_state: RolloutOrdinalState::Legacy,
+        ordinal_refresh_mode: OrdinalRefreshMode::BeforeWrite,
         last_logged_error: None,
     };
     state.add_items(vec![RolloutItem::EventMsg(EventMsg::AgentMessage(
