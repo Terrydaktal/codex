@@ -22,7 +22,7 @@ fn rate_limit_snapshot(
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent,
+            used_percent: used_percent.into(),
             window_duration_mins: Some(300),
             resets_at: None,
         }),

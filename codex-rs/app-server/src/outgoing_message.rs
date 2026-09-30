@@ -1010,7 +1010,7 @@ mod tests {
                     limit_name: None,
                     normal_model_slug: None,
                     primary: Some(RateLimitWindow {
-                        used_percent: 25,
+                        used_percent: 25.0,
                         window_duration_mins: Some(15),
                         resets_at: Some(123),
                     }),
@@ -1032,7 +1032,7 @@ mod tests {
                         "limitName": null,
                         "normalModelSlug": null,
                         "primary": {
-                            "usedPercent": 25,
+                            "usedPercent": 25.0,
                             "windowDurationMins": 15,
                             "resetsAt": 123
                         },

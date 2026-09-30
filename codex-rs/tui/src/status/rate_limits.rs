@@ -90,7 +90,7 @@ impl RateLimitWindowDisplay {
             resets_at_utc.map(|dt| format_reset_timestamp(dt, captured_at, clock_format));
 
         Self {
-            used_percent: f64::from(window.used_percent),
+            used_percent: window.used_percent,
             resets_at,
             window_minutes: window.window_duration_mins,
         }

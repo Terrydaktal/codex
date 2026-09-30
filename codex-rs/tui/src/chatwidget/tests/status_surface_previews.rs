@@ -106,12 +106,12 @@ fn cache_rate_limit_snapshot(chat: &mut ChatWidget) {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 35,
+            used_percent: 35.0,
             window_duration_mins: Some(30 * 24 * 60),
             resets_at: None,
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 50,
+            used_percent: 50.0,
             window_duration_mins: Some(7 * 24 * 60),
             resets_at: None,
         }),
@@ -393,7 +393,7 @@ async fn status_surface_preview_omits_unavailable_rate_limit_items() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 9,
+            used_percent: 9.0,
             window_duration_mins: Some(7 * 24 * 60),
             resets_at: None,
         }),

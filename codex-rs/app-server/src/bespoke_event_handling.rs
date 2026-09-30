@@ -3730,7 +3730,14 @@ mod tests {
             ServerNotification::AccountRateLimitsUpdated(payload) => {
                 assert_eq!(payload.rate_limits.limit_id.as_deref(), Some("codex"));
                 assert_eq!(payload.rate_limits.limit_name, None);
-                assert!(payload.rate_limits.primary.is_some());
+                assert_eq!(
+                    payload
+                        .rate_limits
+                        .primary
+                        .as_ref()
+                        .map(|window| window.used_percent),
+                    Some(42.5)
+                );
                 assert!(payload.rate_limits.credits.is_some());
             }
             other => bail!("unexpected notification: {other:?}"),

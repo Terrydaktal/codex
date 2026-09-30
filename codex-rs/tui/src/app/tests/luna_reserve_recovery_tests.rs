@@ -313,7 +313,7 @@ async fn luna_reserve_recovery_requires_permission_and_no_remaining_blocker() ->
     requests.lock().unwrap().clear();
     let mut recovered = reserve_response();
     recovered.rate_limit_upsell = None;
-    recovered.rate_limits.primary.as_mut().unwrap().used_percent = 0;
+    recovered.rate_limits.primary.as_mut().unwrap().used_percent = 0.0;
     recovered.rate_limits.primary.as_mut().unwrap().resets_at = Some(0);
     for allowed in [None, Some(false)] {
         recovered.ordinary_usage_allowed = allowed;

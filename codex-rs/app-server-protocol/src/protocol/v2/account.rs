@@ -750,7 +750,7 @@ impl From<RateLimitReachedType> for CoreRateLimitReachedType {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct RateLimitWindow {
-    pub used_percent: i32,
+    pub used_percent: f64,
     #[ts(type = "number | null")]
     pub window_duration_mins: Option<i64>,
     #[ts(type = "number | null")]
@@ -760,7 +760,7 @@ pub struct RateLimitWindow {
 impl From<CoreRateLimitWindow> for RateLimitWindow {
     fn from(value: CoreRateLimitWindow) -> Self {
         Self {
-            used_percent: value.used_percent.round() as i32,
+            used_percent: value.used_percent,
             window_duration_mins: value.window_minutes,
             resets_at: value.resets_at,
         }

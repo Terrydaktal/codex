@@ -320,7 +320,7 @@ async fn rate_limit_reset_popup_states_snapshot() {
         .expect("primary window")
         .window_duration_mins = Some(5 * 60);
     rate_limit_snapshot.secondary = Some(RateLimitWindow {
-        used_percent: 50,
+        used_percent: 50.0,
         window_duration_mins: Some(7 * 24 * 60),
         resets_at: None,
     });

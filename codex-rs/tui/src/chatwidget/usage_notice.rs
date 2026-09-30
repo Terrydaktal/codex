@@ -36,13 +36,12 @@ impl UsageNoticeState {
     ) -> Option<Line<'static>> {
         let (window, is_secondary) = self.current()?;
         let label = limit_label_for_window(window.window_duration_mins, is_secondary);
-        // Percentages are rounded by the protocol; 100% alone does not prove a hard stop.
-        let remaining = if window.used_percent >= 100 {
+        let remaining = if window.used_percent >= 100.0 {
             "<1%".to_string()
         } else {
-            format!("{}%", 100 - window.used_percent)
+            format!("{}%", 100.0 - window.used_percent)
         };
-        let emphasis = if window.used_percent >= 95 {
+        let emphasis = if window.used_percent >= 95.0 {
             "only "
         } else {
             ""
@@ -64,7 +63,7 @@ impl UsageNoticeState {
             })
             .unwrap_or_default();
         let mut style = crate::style::warning_notice_style();
-        if window.used_percent >= 90 {
+        if window.used_percent >= 90.0 {
             style = style.bold();
         }
         let compact = Line::from(format!("⚠ {label} {remaining} left"));
@@ -116,7 +115,10 @@ impl UsageNoticeState {
                     .window_duration_mins
                     .or(previous.window_duration_mins);
                 window.resets_at = window.resets_at.or(previous.resets_at);
-                let threshold = warning_threshold(self.plan_type, window.window_duration_mins);
+                let threshold = f64::from(warning_threshold(
+                    self.plan_type,
+                    window.window_duration_mins,
+                ));
                 if previous.used_percent >= threshold && window.used_percent < threshold {
                     continue;
                 }
@@ -144,9 +146,12 @@ impl UsageNoticeState {
             .filter_map(|(window, secondary)| Some((window.as_ref()?, secondary)))
             .filter(|(window, _)| {
                 window.used_percent
-                    >= warning_threshold(self.plan_type, window.window_duration_mins)
+                    >= f64::from(warning_threshold(
+                        self.plan_type,
+                        window.window_duration_mins,
+                    ))
             })
-            .max_by_key(|(window, _)| window.used_percent)
+            .max_by(|(left, _), (right, _)| left.used_percent.total_cmp(&right.used_percent))
             .map(|(window, secondary)| (window.clone(), secondary))
     }
 }

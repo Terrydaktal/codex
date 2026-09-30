@@ -2599,7 +2599,7 @@ mod tests {
             limit_name: None,
             normal_model_slug: None,
             primary: Some(codex_app_server_protocol::RateLimitWindow {
-                used_percent: 0,
+                used_percent: 0.0,
                 window_duration_mins: Some(10_080),
                 resets_at: None,
             }),

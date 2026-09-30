@@ -27,6 +27,7 @@ use codex_protocol::protocol::HookExecutionMode;
 use codex_protocol::protocol::HookHandlerType;
 use codex_protocol::protocol::HookRunStatus;
 use codex_protocol::protocol::HookSource;
+use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SkillScope;
 use codex_protocol::protocol::SubAgentSource;
@@ -240,6 +241,14 @@ pub struct TurnTokenUsageFact {
     pub turn_id: String,
     pub thread_id: String,
     pub token_usage: TokenUsage,
+}
+
+#[derive(Clone)]
+pub struct TurnRateLimitFact {
+    pub turn_id: String,
+    pub thread_id: String,
+    pub rate_limits_at_turn_start: Option<RateLimitSnapshot>,
+    pub rate_limits_at_turn_end: Option<RateLimitSnapshot>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -607,6 +616,7 @@ pub(crate) enum CustomAnalyticsFact {
     GuardianV2(Box<GuardianV2Event>),
     TurnResolvedConfig(Box<TurnResolvedConfigFact>),
     TurnTokenUsage(Box<TurnTokenUsageFact>),
+    TurnRateLimit(Box<TurnRateLimitFact>),
     TurnProfile(Box<TurnProfileFact>),
     TurnCodexError(Box<TurnCodexErrorFact>),
     ImagePreparation(Box<ImagePreparationFact>),
