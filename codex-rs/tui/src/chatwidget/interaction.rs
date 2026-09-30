@@ -153,14 +153,7 @@ impl ChatWidget {
                 self.quit_shortcut_expires_at = None;
                 self.quit_shortcut_key = None;
             }
-            KeyEvent {
-                code: KeyCode::Char(c),
-                modifiers,
-                kind: KeyEventKind::Press,
-                ..
-            } if modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-                && c.eq_ignore_ascii_case(&'v') =>
-            {
+            event if is_clipboard_image_paste_key(event) => {
                 return KeyEventAction::PasteImage;
             }
             other if other.kind == KeyEventKind::Press => {
@@ -476,8 +469,25 @@ impl ChatWidget {
         if !self.startup_submission_has_protected_input() {
             self.cancel_startup_submission();
         }
+        if self.bottom_pane.no_modal_or_popup_active() && self.try_attach_clipboard_image().is_ok()
+        {
+            self.refresh_startup_recovery();
+            return;
+        }
         self.bottom_pane.handle_paste(text);
         self.refresh_startup_recovery();
+    }
+
+    fn try_attach_clipboard_image(&mut self) -> Result<(), PasteImageError> {
+        let (path, info) = (self.clipboard_image_paster)()?;
+        tracing::debug!(
+            "pasted image size={}x{} format={}",
+            info.width,
+            info.height,
+            info.encoded_format.label()
+        );
+        self.attach_image(path);
+        Ok(())
     }
 
     // Returns true if caller should skip rendering this frame (a future frame is scheduled).
@@ -654,4 +664,17 @@ impl ChatWidget {
             status: AppThreadGoalStatus::Paused,
         });
     }
+}
+
+pub(super) fn is_clipboard_image_paste_key(key_event: KeyEvent) -> bool {
+    matches!(
+        key_event,
+        KeyEvent {
+            code: KeyCode::Char(c),
+            modifiers,
+            kind: KeyEventKind::Press,
+            ..
+        } if modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            && c.eq_ignore_ascii_case(&'v')
+    )
 }

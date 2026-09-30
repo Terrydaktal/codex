@@ -175,6 +175,7 @@ impl ChatWidget {
             plan_stream_controller: None,
             pending_stream_consolidations: 0,
             pending_clipboard: None,
+            clipboard_image_paster: paste_image_to_temp_png,
             copy_last_response_binding,
             running_commands: HashMap::new(),
             collab_agent_metadata: HashMap::new(),

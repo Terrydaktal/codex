@@ -1,6 +1,7 @@
 use super::*;
 use crate::app_event::ConnectorsSnapshot;
 use crate::bottom_pane::RestrictedInputMode;
+use crate::clipboard_paste::PastedImageInfo;
 use crate::history_cell::ThreadRecapLoadingCell;
 use base64::Engine;
 use codex_app_server_protocol::ImageReference;
@@ -12,6 +13,55 @@ use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
+
+#[test]
+fn clipboard_image_paste_shortcut_accepts_ctrl_v_variants() {
+    for modifiers in [
+        KeyModifiers::CONTROL,
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    ] {
+        assert!(
+            crate::chatwidget::interaction::is_clipboard_image_paste_key(KeyEvent::new(
+                KeyCode::Char('v'),
+                modifiers
+            ))
+        );
+    }
+
+    assert!(
+        crate::chatwidget::interaction::is_clipboard_image_paste_key(KeyEvent::new(
+            KeyCode::Char('v'),
+            KeyModifiers::ALT
+        ))
+    );
+    assert!(
+        !crate::chatwidget::interaction::is_clipboard_image_paste_key(KeyEvent::new_with_kind(
+            KeyCode::Char('v'),
+            KeyModifiers::CONTROL,
+            crossterm::event::KeyEventKind::Release,
+        ))
+    );
+}
+
+#[tokio::test]
+async fn terminal_paste_prefers_a_clipboard_image_over_its_text_payload() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.clipboard_image_paster = || {
+        Ok((
+            PathBuf::from("/tmp/clipboard-image.png"),
+            PastedImageInfo {
+                width: 640,
+                height: 480,
+                encoded_format: crate::clipboard_paste::EncodedImageFormat::Png,
+            },
+        ))
+    };
+
+    chat.handle_paste("terminal clipboard payload".to_string());
+
+    assert_eq!(chat.bottom_pane.composer_text(), "[Image #1]");
+}
 
 #[tokio::test]
 async fn composer_submission_sends_once_and_requests_latest() {

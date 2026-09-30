@@ -254,6 +254,11 @@ pub(super) async fn make_chatwidget_manual_with_auth(
     widget.clock_format = crate::clock_format::ClockFormat::TwentyFourHour;
     widget.windows_sandbox_host = crate::app::WindowsSandboxHost::Local;
     widget.windows_sandbox_config.requirements = Some(None);
+    widget.clipboard_image_paster = || {
+        Err(PasteImageError::NoImage(
+            "system clipboard disabled in tests".to_string(),
+        ))
+    };
     widget.transcript.active_cell = None;
     widget.transcript.active_cell_revision = 0;
     widget.set_model(&resolved_model);
