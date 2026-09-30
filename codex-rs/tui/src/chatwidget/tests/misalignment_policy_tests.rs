@@ -143,7 +143,9 @@ async fn misalignment_policy_failure_stops_the_thread_and_renders_once() {
     );
 
     assert_eq!(render_bottom_popup(&chat, /*width*/ 80), popup);
-    assert!(drain_insert_history(&mut rx).is_empty());
+    let completion_cells = drain_insert_history(&mut rx);
+    assert_eq!(completion_cells.len(), 1);
+    assert!(lines_to_single_string(&completion_cells[0]).contains("weekly limit remaining:"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));

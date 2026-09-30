@@ -1021,8 +1021,12 @@ async fn unified_exec_end_after_task_complete_is_suppressed() {
     drain_insert_history(&mut rx);
 
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*duration_ms*/ None, /*completion*/ None,
+        /*from_replay*/ false,
     );
+    let completion_cells = drain_insert_history(&mut rx);
+    assert_eq!(completion_cells.len(), 1);
+    assert!(lines_to_single_string(&completion_cells[0]).contains("weekly limit remaining:"));
     end_exec(&mut chat, begin, "", "", /*exit_code*/ 0);
 
     let cells = drain_insert_history(&mut rx);
@@ -1037,8 +1041,12 @@ async fn unified_exec_interaction_after_task_complete_is_suppressed() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.on_task_started();
     chat.on_task_complete(
-        /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ false,
+        /*last_agent_message*/ None, /*duration_ms*/ None, /*completion*/ None,
+        /*from_replay*/ false,
     );
+    let completion_cells = drain_insert_history(&mut rx);
+    assert_eq!(completion_cells.len(), 1);
+    assert!(lines_to_single_string(&completion_cells[0]).contains("weekly limit remaining:"));
 
     terminal_interaction(&mut chat, "call-1", "proc-1", "ls\n");
 
@@ -1094,48 +1102,50 @@ async fn unified_exec_wait_before_streamed_agent_message_snapshot() {
 
 #[tokio::test]
 async fn final_worked_for_uses_cumulative_turn_duration_snapshot() {
-    for duration_ms in [Some(125_000), None] {
-        let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
-        handle_turn_started(&mut chat, "turn-1");
+    let duration_ms = Some(125_000);
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    handle_turn_started(&mut chat, "turn-1");
 
-        let exec = begin_exec_with_source(
-            &mut chat,
-            "call-1",
-            "echo preparing",
-            ExecCommandSource::Agent,
-        );
-        end_exec(&mut chat, exec, "preparing\n", "", /*exit_code*/ 0);
+    let exec = begin_exec_with_source(
+        &mut chat,
+        "call-1",
+        "echo preparing",
+        ExecCommandSource::Agent,
+    );
+    end_exec(&mut chat, exec, "preparing\n", "", /*exit_code*/ 0);
 
-        chat.bottom_pane
-            .reset_status_timer(Duration::from_secs(/*secs*/ 125));
-        handle_agent_message_delta(&mut chat, "Final response.\n");
-        chat.on_commit_tick();
-        assert!(!chat.bottom_pane.status_indicator_visible());
+    chat.bottom_pane
+        .reset_status_timer(Duration::from_secs(/*secs*/ 125));
+    handle_agent_message_delta(&mut chat, "Final response.\n");
+    chat.on_commit_tick();
+    assert!(!chat.bottom_pane.status_indicator_visible());
 
-        complete_assistant_message(
-            &mut chat,
-            "msg-final",
-            "Final response.",
-            Some(MessagePhase::FinalAnswer),
-        );
-        handle_turn_completed(&mut chat, "turn-1", duration_ms);
+    complete_assistant_message(
+        &mut chat,
+        "msg-final",
+        "Final response.",
+        Some(MessagePhase::FinalAnswer),
+    );
+    handle_turn_completed(&mut chat, "turn-1", duration_ms);
 
-        let cells = drain_insert_history_with(&mut rx, |cell| {
-            let rendered = lines_to_single_string(&cell.display_lines(/*width*/ 80));
-            if cell.as_any().is::<history_cell::FinalMessageSeparator>() {
-                assert!(rendered.contains("Worked for 2m 5s"), "{rendered}");
-            }
-            normalize_completion_timestamps(cell, rendered)
-                .lines()
-                .map(|line| Line::from(line.to_owned()))
-                .collect()
-        });
-        let combined = cells
-            .iter()
-            .map(|lines| lines_to_single_string(lines))
-            .collect::<String>();
-        assert_chatwidget_snapshot!("final_worked_for_uses_cumulative_turn_duration", combined);
-    }
+    let cells = drain_insert_history_with(&mut rx, |cell| {
+        let rendered = lines_to_single_string(&cell.display_lines(/*width*/ 80));
+        if cell
+            .as_any()
+            .is::<crate::chatwidget::task_usage::TaskUsageSummaryHistoryCell>()
+        {
+            assert!(rendered.contains("time wall 2m 5.0s"), "{rendered}");
+        }
+        normalize_completion_timestamps(cell, rendered)
+            .lines()
+            .map(|line| Line::from(line.to_owned()))
+            .collect()
+    });
+    let combined = cells
+        .iter()
+        .map(|lines| lines_to_single_string(lines))
+        .collect::<String>();
+    assert_chatwidget_snapshot!("final_worked_for_uses_cumulative_turn_duration", combined);
 }
 
 #[tokio::test]

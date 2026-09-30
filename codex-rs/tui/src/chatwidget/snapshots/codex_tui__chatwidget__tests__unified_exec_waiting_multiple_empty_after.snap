@@ -1,11 +1,28 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
-assertion_line: 1229
 expression: combined
 ---
 Chat:
-  Worked for [duration] • [completion time]
+────────────────────────────────────────────────────────────────────────────────
+• weekly limit remaining:   100%
+• tokens: total:            0 (0%)
+          cached-input:     0 (0%)
+          non-cached-input: 0 (0%)
+          normal-output:    0 (0%)
+          reasoning-output: 0 (0%)
+• files created 0 · deleted 0 · modified 0 · lines +0 / -0
+• time wall [duration] · finished [completion time]
+────────────────────────────────────────────────────────────────────────────────
 
 Transcript:
 • Waited for background terminal · just fix
-  Worked for [duration] • [completion time]
+────────────────────────────────────────────────────────────────────────────────
+• weekly limit remaining:   100%
+• tokens: total:            0 (0%)
+          cached-input:     0 (0%)
+          non-cached-input: 0 (0%)
+          normal-output:    0 (0%)
+          reasoning-output: 0 (0%)
+• files created 0 · deleted 0 · modified 0 · lines +0 / -0
+• time wall [duration] · finished [completion time]
+────────────────────────────────────────────────────────────────────────────────

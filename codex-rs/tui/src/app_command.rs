@@ -19,6 +19,7 @@ use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
 use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use codex_protocol::protocol::TaskUsageSummaryEvent;
 use codex_protocol::request_permissions::RequestPermissionsResponse;
 use serde::Serialize;
 use serde::Serializer;
@@ -187,6 +188,9 @@ pub(crate) enum AppCommand {
     },
     ApproveGuardianDeniedAction {
         event: GuardianAssessmentEvent,
+    },
+    RecordTaskUsage {
+        summary: TaskUsageSummaryEvent,
     },
 }
 

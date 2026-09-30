@@ -319,7 +319,8 @@ impl ChatWidget {
         self.reset_realtime_conversation();
         // Finish any output not yet drained from the old runtime without live completion actions.
         self.on_task_complete(
-            /*last_agent_message*/ None, /*completion*/ None, /*from_replay*/ true,
+            /*last_agent_message*/ None, /*duration_ms*/ None, /*completion*/ None,
+            /*from_replay*/ true,
         );
         self.turn_lifecycle.reset_thread();
         self.review = Default::default();

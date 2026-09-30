@@ -50,6 +50,7 @@ use codex_protocol::protocol::GuardianUserAuthorization as CoreGuardianUserAutho
 use codex_protocol::protocol::PatchApplyStatus as CorePatchApplyStatus;
 use codex_protocol::protocol::ReviewDecision as CoreReviewDecision;
 use codex_protocol::protocol::SubAgentActivityKind as CoreSubAgentActivityKind;
+use codex_protocol::protocol::TaskUsageSummaryEvent;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::LegacyAppPathString;
 use serde::Deserialize;
@@ -426,6 +427,12 @@ pub enum ThreadItem {
     ContextCompaction {
         id: String,
     },
+    #[serde(rename_all = "camelCase")]
+    #[ts(rename_all = "camelCase")]
+    TaskUsageSummary {
+        id: String,
+        summary: TaskUsageSummaryEvent,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -465,7 +472,8 @@ impl ThreadItem {
             | ThreadItem::ImageView { id, .. }
             | ThreadItem::EnteredReviewMode { id, .. }
             | ThreadItem::ExitedReviewMode { id, .. }
-            | ThreadItem::ContextCompaction { id, .. } => id,
+            | ThreadItem::ContextCompaction { id, .. }
+            | ThreadItem::TaskUsageSummary { id, .. } => id,
             ThreadItem::WebSearch(item) => &item.id,
             ThreadItem::Sleep(item) => &item.id,
             ThreadItem::ImageGeneration(item) => &item.id,

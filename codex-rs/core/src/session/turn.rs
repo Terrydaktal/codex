@@ -2102,6 +2102,7 @@ pub(super) fn realtime_text_for_event(msg: &EventMsg) -> Option<RealtimeEventTex
         | EventMsg::ThreadSettingsApplied(_)
         | EventMsg::TurnComplete(_)
         | EventMsg::TokenCount(_)
+        | EventMsg::TaskUsageSummary(_)
         | EventMsg::UserMessage(_)
         | EventMsg::AgentReasoning(_)
         | EventMsg::AgentReasoningRawContent(_)

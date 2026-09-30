@@ -259,6 +259,8 @@ use codex_app_server_protocol::ThreadRealtimeStartResponse;
 use codex_app_server_protocol::ThreadRealtimeStartTransport;
 use codex_app_server_protocol::ThreadRealtimeStopParams;
 use codex_app_server_protocol::ThreadRealtimeStopResponse;
+use codex_app_server_protocol::ThreadRecordTaskUsageParams;
+use codex_app_server_protocol::ThreadRecordTaskUsageResponse;
 use codex_app_server_protocol::ThreadResumeInitialTurnsPageParams;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;

@@ -1829,6 +1829,36 @@ pub(crate) fn normalize_completion_timestamps(
     cell: &dyn HistoryCell,
     value: impl std::fmt::Display,
 ) -> String {
+    if cell
+        .as_any()
+        .is::<crate::chatwidget::task_usage::TaskUsageSummaryHistoryCell>()
+    {
+        static TASK_USAGE_FOOTER: std::sync::LazyLock<regex_lite::Regex> = std::sync::LazyLock::new(
+            || {
+                regex_lite::Regex::new(
+                    r"(?m)^(?P<indent>[ \t]*• time wall )[^·(\n]+(?P<tools> \(local tools [^)]+\))?(?P<first> · first output [^·\n]+)? · finished [^\n]+?(?P<padding>[ \t]*)$",
+                )
+                .expect("valid task usage footer pattern")
+            },
+        );
+        return TASK_USAGE_FOOTER
+            .replace_all(&value.to_string(), |captures: &regex_lite::Captures<'_>| {
+                let indent = &captures["indent"];
+                let padding = &captures["padding"];
+                let local_tools = captures
+                    .name("tools")
+                    .map(|_| " (local tools [duration])")
+                    .unwrap_or_default();
+                let first_output = captures
+                    .name("first")
+                    .map(|_| " · first output [duration]")
+                    .unwrap_or_default();
+                format!(
+                    "{indent}[duration]{local_tools}{first_output} · finished [completion time]{padding}"
+                )
+            })
+            .into_owned();
+    }
     if !cell.as_any().is::<history_cell::FinalMessageSeparator>() {
         return value.to_string();
     }

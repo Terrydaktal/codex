@@ -5,6 +5,8 @@ use std::time::Instant;
 
 use codex_utils_sleep_inhibitor::SleepInhibitor;
 
+use super::task_usage::TaskUsageBaseline;
+
 #[derive(Debug)]
 pub(super) struct TurnLifecycleState {
     pub(super) sleep_inhibitor: SleepInhibitor,
@@ -15,6 +17,7 @@ pub(super) struct TurnLifecycleState {
     /// Completion labels already inserted into this thread's visible history.
     pub(super) rendered_completion_turn_ids: HashSet<String>,
     pub(super) goal_status_active_turn_started_at: Option<Instant>,
+    pub(super) task_usage_baseline: Option<TaskUsageBaseline>,
 }
 
 impl TurnLifecycleState {
@@ -26,6 +29,7 @@ impl TurnLifecycleState {
             budget_limited_turn_ids: HashSet::new(),
             rendered_completion_turn_ids: HashSet::new(),
             goal_status_active_turn_started_at: None,
+            task_usage_baseline: None,
         }
     }
 
@@ -53,6 +57,7 @@ impl TurnLifecycleState {
         self.last_turn_id = None;
         self.budget_limited_turn_ids.clear();
         self.rendered_completion_turn_ids.clear();
+        self.task_usage_baseline = None;
     }
 
     pub(super) fn set_prevent_idle_sleep(&mut self, enabled: bool) {

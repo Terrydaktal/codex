@@ -1234,8 +1234,11 @@ async fn interrupted_turn_error_message_snapshot() {
         !cells.is_empty(),
         "expected notice to be inserted after interruption"
     );
-    let last = cells.last().unwrap();
-    let line = last.last().unwrap();
+    let notice = cells
+        .iter()
+        .find(|cell| lines_to_single_string(cell).contains("Conversation interrupted"))
+        .expect("interruption notice should be inserted before the task summary");
+    let line = notice.last().unwrap();
     assert_eq!(
         line.spans
             .iter()
@@ -1243,8 +1246,8 @@ async fn interrupted_turn_error_message_snapshot() {
             .collect::<Vec<_>>(),
         vec![crate::style::secondary_text_style(); line.spans.len()]
     );
-    let last = lines_to_single_string(last);
-    assert_chatwidget_snapshot!("interrupted_turn_error_message", last);
+    let notice = lines_to_single_string(notice);
+    assert_chatwidget_snapshot!("interrupted_turn_error_message", notice);
 }
 
 #[tokio::test]
@@ -1309,8 +1312,14 @@ async fn interrupted_turn_after_goal_budget_limited_uses_budget_message_snapshot
     );
 
     let cells = drain_insert_history(&mut rx);
-    let last = lines_to_single_string(cells.last().unwrap());
-    assert_chatwidget_snapshot!("interrupted_turn_goal_budget_limited_message", last);
+    let notice = cells
+        .iter()
+        .find(|cell| lines_to_single_string(cell).contains("Goal budget reached"))
+        .expect("goal budget notice should be inserted before the task summary");
+    assert_chatwidget_snapshot!(
+        "interrupted_turn_goal_budget_limited_message",
+        lines_to_single_string(notice)
+    );
 }
 
 #[tokio::test]
@@ -1321,8 +1330,14 @@ async fn direct_budget_limited_turn_uses_budget_message_snapshot() {
     handle_budget_limited_turn(&mut chat, "turn-1");
 
     let cells = drain_insert_history(&mut rx);
-    let last = lines_to_single_string(cells.last().unwrap());
-    assert_chatwidget_snapshot!("direct_budget_limited_turn_message", last);
+    let notice = cells
+        .iter()
+        .find(|cell| lines_to_single_string(cell).contains("Goal budget reached"))
+        .expect("goal budget notice should be inserted before the task summary");
+    assert_chatwidget_snapshot!(
+        "direct_budget_limited_turn_message",
+        lines_to_single_string(notice)
+    );
 }
 
 #[tokio::test]

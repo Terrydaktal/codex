@@ -411,6 +411,13 @@ impl ThreadHistoryBuilder {
             EventMsg::HookStarted(_) | EventMsg::HookCompleted(_) => {}
             EventMsg::Error(payload) => self.handle_error(payload),
             EventMsg::TokenCount(_) => {}
+            EventMsg::TaskUsageSummary(payload) => self.upsert_item_in_turn_id(
+                &payload.turn_id,
+                ThreadItem::TaskUsageSummary {
+                    id: format!("task-usage-{}", payload.turn_id),
+                    summary: payload.clone(),
+                },
+            ),
             EventMsg::ThreadRolledBack(payload) => self.handle_thread_rollback(payload),
             EventMsg::TurnAborted(payload) => self.handle_turn_aborted(payload),
             EventMsg::TurnStarted(payload) => self.handle_turn_started(payload),
@@ -1801,6 +1808,7 @@ mod tests {
     use codex_protocol::protocol::PatchApplyBeginEvent;
     use codex_protocol::protocol::ReviewTarget;
     use codex_protocol::protocol::SubAgentActivityKind as CoreSubAgentActivityKind;
+    use codex_protocol::protocol::TaskUsageSummaryEvent;
     use codex_protocol::protocol::ThreadRolledBackEvent;
     use codex_protocol::protocol::TurnAbortReason;
     use codex_protocol::protocol::TurnAbortedEvent;
@@ -2018,6 +2026,63 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn task_usage_summary_is_attached_to_completed_turn() {
+        let events = vec![
+            RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
+                turn_id: "turn-1".into(),
+                root_turn_id: None,
+                trace_id: None,
+                started_at: None,
+                model_context_window: None,
+                collaboration_mode_kind: Default::default(),
+            })),
+            RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
+                turn_id: "turn-1".into(),
+                last_agent_message: None,
+                error: None,
+                started_at: None,
+                completed_at: None,
+                duration_ms: Some(1_000),
+                time_to_first_token_ms: Some(100),
+            })),
+            RolloutItem::EventMsg(EventMsg::TaskUsageSummary(TaskUsageSummaryEvent {
+                turn_id: "turn-1".into(),
+                model: "gpt-5.6-luna".into(),
+                total_tokens: 10,
+                input_tokens: 8,
+                cached_input_tokens: 4,
+                output_tokens: 2,
+                reasoning_output_tokens: 1,
+                weekly_limit_used_percent: Some(0.001),
+                calculated_weekly_remaining_percent: Some(63.0),
+                plan_remaining_percent: Some(64.0),
+                files_changed: 1,
+                files_created: 0,
+                files_deleted: 0,
+                files_modified: 1,
+                lines_added: 2,
+                lines_removed: 1,
+                wall_time_ms: Some(1_000),
+                model_time_ms: Some(700),
+                local_tool_time_ms: Some(200),
+                overhead_time_ms: Some(50),
+                first_output_ms: Some(100),
+                finished_at: None,
+            })),
+        ];
+
+        let turns = build_turns_from_rollout_items(&events);
+
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].items.len(), 1);
+        assert!(matches!(
+            &turns[0].items[0],
+            ThreadItem::TaskUsageSummary { id, summary }
+                if id == "task-usage-turn-1" && summary.turn_id == "turn-1"
+        ));
     }
 
     #[test]

@@ -975,7 +975,8 @@ async fn execute_inner(
                                     | ThreadItem::ImageView { .. }
                                     | ThreadItem::EnteredReviewMode { .. }
                                     | ThreadItem::ExitedReviewMode { .. }
-                                    | ThreadItem::ContextCompaction { .. } => None,
+                                    | ThreadItem::ContextCompaction { .. }
+                                    | ThreadItem::TaskUsageSummary { .. } => None,
                                 })
                                 });
                             polls.push(json!({
@@ -1426,6 +1427,9 @@ fn turn_summary(turn: &Turn, include_outputs: bool, output_chars: usize) -> Valu
             }),
             ThreadItem::ContextCompaction { id } => json!({
                 "type": "contextCompaction", "id": id
+            }),
+            ThreadItem::TaskUsageSummary { id, summary } => json!({
+                "type": "taskUsageSummary", "id": id, "summary": summary
             }),
         })
         .take(20)

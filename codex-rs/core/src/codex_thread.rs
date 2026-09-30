@@ -44,6 +44,7 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionSource;
+use codex_protocol::protocol::TaskUsageSummaryEvent;
 use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadMemoryMode;
 use codex_protocol::protocol::ThreadSettingsOverrides;
@@ -794,6 +795,27 @@ impl CodexThread {
         self.session
             .inject_client_response_items(items, turn_context.as_ref())
             .await;
+        Ok(())
+    }
+
+    /// Persist a per-turn usage summary without adding it to model-visible history.
+    pub async fn record_task_usage_summary(
+        &self,
+        summary: TaskUsageSummaryEvent,
+    ) -> CodexResult<()> {
+        if summary.turn_id.is_empty() {
+            return Err(CodexErr::InvalidRequest(
+                "summary.turn_id must not be empty".to_string(),
+            ));
+        }
+
+        self.session
+            .send_event_raw(Event {
+                id: summary.turn_id.clone(),
+                msg: codex_protocol::protocol::EventMsg::TaskUsageSummary(summary),
+            })
+            .await;
+        self.session.flush_rollout().await?;
         Ok(())
     }
 

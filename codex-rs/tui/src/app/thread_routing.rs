@@ -1013,6 +1013,12 @@ impl App {
                     .await?;
                 Ok(true)
             }
+            AppCommand::RecordTaskUsage { summary } => {
+                app_server
+                    .thread_record_task_usage(thread_id, summary.clone())
+                    .await?;
+                Ok(true)
+            }
             _ => Ok(false),
         }
     }
@@ -2063,9 +2069,10 @@ impl App {
     pub(super) fn handle_thread_event_replay(&mut self, event: ThreadBufferedEvent) {
         self.turn_tips.dismiss();
         match event {
-            ThreadBufferedEvent::Notification(notification) => self
-                .chat_widget
-                .handle_server_notification(*notification, Some(ReplayKind::ThreadSnapshot)),
+            ThreadBufferedEvent::Notification(notification) => {
+                self.chat_widget
+                    .handle_server_notification(*notification, Some(ReplayKind::ThreadSnapshot));
+            }
             ThreadBufferedEvent::Request(request) => {
                 let may_open_protected_view =
                     self.startup_request_may_open_protected_view(request.as_ref());

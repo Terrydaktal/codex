@@ -105,6 +105,9 @@ async fn completion_live_shows_known_durations_and_preserves_timestamp_fallback(
     ] {
         let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
         handle_turn_started(&mut chat, "turn-1");
+        // Exercise the compatibility fallback used by historical turns that predate persisted
+        // task summaries.
+        chat.turn_lifecycle.task_usage_baseline = None;
         let turn = completed_turn(Some(duration_ms), completed_at);
         let before = Local::now();
         complete_turn(&mut chat, turn.clone());

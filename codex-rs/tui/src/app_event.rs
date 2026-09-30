@@ -229,6 +229,9 @@ pub(crate) enum RateLimitRefreshOrigin {
     Recovery,
     /// Background account usage read, scheduled more frequently near exhaustion.
     Periodic,
+    /// Refresh requested after a task completes so reset detection happens
+    /// before that task's usage is committed to the local ledger.
+    TaskCompletion { request_id: u64 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

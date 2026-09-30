@@ -391,6 +391,7 @@ use self::status_surfaces::CachedProjectRootName;
 mod thread_title_status;
 mod thread_usage;
 pub(crate) use self::thread_usage::ThreadUsageOutcome;
+pub(crate) mod task_usage;
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
@@ -558,6 +559,9 @@ pub(crate) struct ChatWidget {
     token_usage_pending: bool,
     // Status and polling use account usage reads; response streams may identify meters differently.
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
+    pending_task_usage_summaries:
+        HashMap<u64, Option<codex_protocol::protocol::TaskUsageSummaryEvent>>,
+    next_task_usage_refresh_request_id: u64,
     refreshing_status_outputs: Vec<(u64, StatusHistoryHandle)>,
     next_status_refresh_request_id: u64,
     pending_rate_limit_reset_request_id: Option<u64>,
@@ -911,7 +915,7 @@ fn request_permissions_from_params(
     })
 }
 
-fn token_usage_info_from_app_server(token_usage: ThreadTokenUsage) -> TokenUsageInfo {
+pub(crate) fn token_usage_info_from_app_server(token_usage: ThreadTokenUsage) -> TokenUsageInfo {
     TokenUsageInfo {
         total_token_usage: TokenUsage {
             total_tokens: token_usage.total.total_tokens,

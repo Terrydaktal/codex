@@ -109,6 +109,13 @@ pub(super) fn cells(item: ThreadItem, cwd: &AbsolutePathBuf) -> TranscriptCells 
                 /*hint*/ None,
             )));
         }
+        ThreadItem::TaskUsageSummary { summary, .. } => {
+            cells.push(Arc::new(
+                crate::chatwidget::task_usage::task_usage_summary_history_cell_from_summary(
+                    &summary,
+                ),
+            ));
+        }
         // These items do not have richer history-cell presentations yet.
         ThreadItem::HookPrompt { fragments, .. } => {
             if !fragments.is_empty() {

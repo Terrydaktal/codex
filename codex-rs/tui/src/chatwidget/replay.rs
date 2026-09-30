@@ -4,6 +4,7 @@
 //! live-only side effects. An in-progress snapshot does not carry reasoning completion
 //! state: keep its trailing reasoning provisional until live events identify the next item.
 
+use super::task_usage::task_usage_summary_history_cell_from_summary;
 use super::*;
 
 impl ChatWidget {
@@ -452,6 +453,13 @@ impl ChatWidget {
                     ));
                 }
             }
+            ThreadItem::TaskUsageSummary { summary, .. } if from_replay => {
+                self.turn_lifecycle
+                    .rendered_completion_turn_ids
+                    .insert(summary.turn_id.clone());
+                self.add_to_history(task_usage_summary_history_cell_from_summary(&summary));
+            }
+            ThreadItem::TaskUsageSummary { .. } => {}
             ThreadItem::HookPrompt { .. } => {}
             ThreadItem::CollabAgentToolCall {
                 id,

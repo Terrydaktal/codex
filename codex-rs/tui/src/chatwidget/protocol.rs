@@ -45,9 +45,13 @@ impl ChatWidget {
         }
         match notification {
             ServerNotification::ThreadTokenUsageUpdated(notification) => {
-                self.set_token_info(Some(token_usage_info_from_app_server(
-                    notification.token_usage,
-                )));
+                let info = token_usage_info_from_app_server(notification.token_usage);
+                self.record_task_response_usage(
+                    &notification.thread_id,
+                    &notification.turn_id,
+                    &info,
+                );
+                self.set_token_info(Some(info));
             }
             ServerNotification::ThreadNameUpdated(notification) => {
                 match ThreadId::from_string(&notification.thread_id) {
@@ -102,6 +106,7 @@ impl ChatWidget {
                 self.handle_item_completed_notification(notification, replay_kind);
             }
             ServerNotification::AgentMessageDelta(notification) => {
+                self.record_task_first_output();
                 self.restore_realtime_transcripts_before_turn(&notification.turn_id);
                 if !self.is_realtime_delegated_reasoning_turn(&notification.turn_id)
                     && (from_replay
@@ -114,10 +119,12 @@ impl ChatWidget {
                 }
             }
             ServerNotification::PlanDelta(notification) => {
+                self.record_task_first_output();
                 self.restore_realtime_transcripts_before_turn(&notification.turn_id);
                 self.on_plan_delta(notification.delta);
             }
             ServerNotification::ReasoningSummaryTextDelta(notification) => {
+                self.record_task_first_output();
                 if !self.is_realtime_delegated_reasoning_item(
                     &notification.turn_id,
                     &notification.item_id,
@@ -128,6 +135,7 @@ impl ChatWidget {
                 }
             }
             ServerNotification::ReasoningTextDelta(notification) => {
+                self.record_task_first_output();
                 if self.config.show_raw_agent_reasoning
                     && !self.is_realtime_delegated_reasoning_item(
                         &notification.turn_id,
@@ -461,6 +469,7 @@ impl ChatWidget {
                 let completion = self.completion_cell(&notification.turn, replay_kind);
                 self.on_task_complete(
                     last_agent_message.map(|(_, _, text)| text),
+                    notification.turn.duration_ms,
                     completion,
                     replay_kind.is_some(),
                 );
@@ -470,6 +479,9 @@ impl ChatWidget {
                     question_drafts = self.take_question_drafts();
                 }
                 self.last_non_retry_error = None;
+                if replay_kind.is_some() {
+                    self.turn_lifecycle.task_usage_baseline = None;
+                }
                 let reason = if self
                     .turn_lifecycle
                     .take_budget_limited(notification.turn.id.as_str())
@@ -483,7 +495,24 @@ impl ChatWidget {
             TurnStatus::Failed => {
                 if replay_kind.is_none() {
                     question_drafts = self.take_question_drafts();
+                    self.collect_runtime_metrics_delta();
                 }
+                let task_usage_summary = if replay_kind.is_none() && self.has_chatgpt_account {
+                    self.defer_task_usage_summary(
+                        notification.turn.duration_ms,
+                        self.turn_runtime_metrics,
+                    );
+                    None
+                } else {
+                    self.take_task_usage_summary(
+                        notification.turn.duration_ms,
+                        if replay_kind.is_none() {
+                            self.turn_runtime_metrics
+                        } else {
+                            Default::default()
+                        },
+                    )
+                };
                 if let Some(error) = notification.turn.error {
                     if replay_kind.is_none()
                         && error.codex_error_info
@@ -506,6 +535,11 @@ impl ChatWidget {
                     self.finalize_turn();
                     self.request_redraw();
                     self.maybe_send_next_queued_input();
+                }
+                if replay_kind.is_none()
+                    && let Some(task_usage_summary) = task_usage_summary
+                {
+                    self.append_task_usage_summary(task_usage_summary);
                 }
             }
             TurnStatus::InProgress => {}
@@ -530,6 +564,14 @@ impl ChatWidget {
         replay_kind: Option<ReplayKind>,
     ) {
         self.restore_realtime_transcripts_before_turn(&notification.turn_id);
+        if replay_kind.is_none()
+            && !matches!(
+                &notification.item,
+                ThreadItem::UserMessage { .. } | ThreadItem::HookPrompt { .. }
+            )
+        {
+            self.record_task_first_output();
+        }
         match notification.item {
             ThreadItem::UserMessage { content, .. } if replay_kind.is_none() => {
                 self.note_realtime_user_item_started(&notification.turn_id, &content);
@@ -646,6 +688,17 @@ impl ChatWidget {
             && self.status_state.reasoning_item_id.as_ref() != Some(id)
         {
             return;
+        }
+        match &notification.item {
+            ThreadItem::CommandExecution { duration_ms, .. }
+            | ThreadItem::McpToolCall { duration_ms, .. }
+            | ThreadItem::DynamicToolCall { duration_ms, .. } => {
+                self.record_task_local_tool_duration(*duration_ms);
+            }
+            ThreadItem::Sleep(item) => {
+                self.record_task_local_tool_duration(i64::try_from(item.duration_ms).ok());
+            }
+            _ => {}
         }
         match notification.item {
             item @ ThreadItem::CommandExecution { .. } => self.on_command_execution_completed(item),

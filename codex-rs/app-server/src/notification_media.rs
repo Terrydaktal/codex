@@ -211,7 +211,8 @@ fn without_thread_item_media(mut item: ThreadItem) -> ThreadItem {
         | ThreadItem::Sleep(_)
         | ThreadItem::EnteredReviewMode { .. }
         | ThreadItem::ExitedReviewMode { .. }
-        | ThreadItem::ContextCompaction { .. } => {}
+        | ThreadItem::ContextCompaction { .. }
+        | ThreadItem::TaskUsageSummary { .. } => {}
     }
     item
 }

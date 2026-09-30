@@ -82,6 +82,7 @@ export type { SessionSource } from "./SessionSource";
 export type { Settings } from "./Settings";
 export type { SleepItem } from "./SleepItem";
 export type { SubAgentSource } from "./SubAgentSource";
+export type { TaskUsageSummaryEvent } from "./TaskUsageSummaryEvent";
 export type { ThreadId } from "./ThreadId";
 export type { ThreadMemoryMode } from "./ThreadMemoryMode";
 export type { Tool } from "./Tool";
