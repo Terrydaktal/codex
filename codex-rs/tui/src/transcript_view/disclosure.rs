@@ -133,35 +133,6 @@ impl TranscriptView {
         }
     }
 
-    pub(super) fn toggle_disclosure_at(
-        &mut self,
-        cells: &[Arc<dyn HistoryCell>],
-        column: u16,
-        row: u16,
-    ) -> bool {
-        if self.detailed || self.mode != HistoryRenderMode::Rich {
-            return false;
-        }
-        let Some(visible) = row
-            .checked_sub(self.area.y)
-            .and_then(|row| self.visible.get(usize::from(row)))
-        else {
-            return false;
-        };
-        if visible.layout.disclosure_row() != Some(visible.row)
-            || column
-                .checked_sub(self.area.x)
-                .is_none_or(|column| !visible.layout.disclosure_columns().contains(&column))
-        {
-            return false;
-        }
-        let Some(index) = self.canonical_activity_index(cells, &visible.activity_ids) else {
-            return false;
-        };
-        self.toggle_activity(cells, index);
-        true
-    }
-
     pub(super) fn handle_disclosure_key(
         &mut self,
         key: KeyEvent,

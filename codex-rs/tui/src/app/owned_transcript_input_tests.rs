@@ -138,6 +138,73 @@ fn pointer_event(kind: MouseEventKind, column: u16, row: u16) -> TuiEvent {
 }
 
 #[tokio::test]
+async fn ctrl_t_expands_command_output_and_returns_to_compact_preview() -> Result<()> {
+    let mut app = crate::app::test_support::make_test_app().await;
+    app.transcript_cells = vec![Arc::new(crate::exec_cell::ExecCell::new(
+        crate::exec_cell::ExecCall {
+            call_id: "output".into(),
+            command: vec!["show-output".into()],
+            parsed: Vec::new(),
+            output: Some(crate::exec_cell::CommandOutput::new(
+                /*exit_code*/ 0,
+                (1..=12).map(|line| format!("output {line:02}\n")).collect(),
+            )),
+            source: codex_app_server_protocol::CommandExecutionSource::Agent,
+            start_time: None,
+            duration: Some(std::time::Duration::from_millis(20)),
+            interaction_input: None,
+        },
+        /*animations_enabled*/ false,
+    ))];
+    let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    tui.set_owned_screen(/*owned*/ true)?;
+    let size = Size::new(/*width*/ 80, /*height*/ 24);
+    app.render_owned_transcript(&mut tui, size)?;
+    let compact = screen(&tui);
+    let (row, hint) = compact
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.contains("ctrl+t to expand"))
+        .expect("compact output advertises the transcript shortcut");
+    let column = hint.find('+').expect("omitted output count") as u16;
+    for kind in [
+        MouseEventKind::Down(MouseButton::Left),
+        MouseEventKind::Up(MouseButton::Left),
+    ] {
+        app.handle_tui_event(
+            &mut tui,
+            &mut server,
+            pointer_event(kind, column, row as u16),
+        )
+        .await?;
+    }
+    app.render_owned_transcript(&mut tui, size)?;
+    let pointer = screen(&tui);
+    let mut snapshots = vec![format!("compact\n{compact}"), format!("pointer\n{pointer}")];
+    for (label, detailed) in [("ctrl+t", true), ("ctrl+t again", false)] {
+        app.handle_tui_event(
+            &mut tui,
+            &mut server,
+            TuiEvent::Key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL)),
+        )
+        .await?;
+        app.render_owned_transcript(&mut tui, size)?;
+        assert_eq!(app.transcript_view.is_detailed(), detailed);
+        let rendered = screen(&tui);
+        if detailed {
+            assert!(rendered.contains("output 01"));
+            assert!(rendered.contains("output 12"));
+        }
+        snapshots.push(format!("{label}\n{rendered}"));
+    }
+    insta::assert_snapshot!("command_output_ctrl_t", snapshots.join("\n\n"));
+    tui.set_owned_screen(/*owned*/ false)?;
+    server.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn plan_menu_allows_transcript_wheel_scrolling_and_keeps_keyboard_ownership() -> Result<()> {
     for close in [KeyCode::Esc, KeyCode::Enter] {
         let (mut app, mut events, _operations) = make_test_app_with_channels().await;
