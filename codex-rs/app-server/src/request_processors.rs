@@ -438,7 +438,6 @@ use codex_protocol::config_types::TrustLevel;
 use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
-#[cfg(test)]
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -452,6 +451,7 @@ use codex_protocol::protocol::EnvironmentConfigState;
 use codex_protocol::protocol::EventMsg;
 #[cfg(test)]
 use codex_protocol::protocol::GitInfo as CoreGitInfo;
+use codex_protocol::protocol::HasLegacyEvent;
 use codex_protocol::protocol::McpAuthStatus as CoreMcpAuthStatus;
 use codex_protocol::protocol::Op;
 use codex_protocol::protocol::RealtimeVoicesList;
@@ -718,10 +718,39 @@ pub(crate) use self::thread_summary::thread_settings_from_config_snapshot;
 
 pub(crate) fn build_legacy_api_turns_from_rollout_items(items: &[RolloutItem]) -> Vec<Turn> {
     let mut builder = ThreadHistoryBuilder::new();
+    let has_materialized_user_messages = items.iter().any(|item| {
+        matches!(
+            item,
+            RolloutItem::EventMsg(EventMsg::ItemCompleted(event))
+                if matches!(event.item, TurnItem::UserMessage(_))
+        )
+    });
+    let has_legacy_user_messages = items
+        .iter()
+        .any(|item| matches!(item, RolloutItem::EventMsg(EventMsg::UserMessage(_))));
+    let replay_materialized_history = has_materialized_user_messages && !has_legacy_user_messages;
+
     for item in items {
+        if replay_materialized_history
+            && let RolloutItem::EventMsg(EventMsg::ItemCompleted(event)) = item
+        {
+            let legacy_events = event.as_legacy_events(/*show_raw_agent_reasoning*/ false);
+            if legacy_events.is_empty() {
+                builder.handle_rollout_item(item);
+            } else {
+                for event in legacy_events {
+                    builder.handle_event(&event);
+                }
+            }
+            continue;
+        }
         if is_persisted_rollout_item(item, codex_protocol::protocol::ThreadHistoryMode::Legacy) {
             builder.handle_rollout_item(item);
         }
     }
     builder.finish()
 }
+
+#[cfg(test)]
+#[path = "request_processors_tests.rs"]
+mod tests;

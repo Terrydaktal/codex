@@ -23,9 +23,11 @@ use codex_app_server_protocol::TurnItemsView;
 use codex_protocol::ThreadId;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use color_eyre::eyre::Result;
+use color_eyre::eyre::WrapErr;
 
 // Bound recovery to recent messages when item paging is unavailable.
-const READ_ONLY_HISTORY_TURN_LIMIT: u32 = 100;
+const SUMMARY_HISTORY_TURN_LIMIT: u32 = 100;
+const SUMMARY_HISTORY_NOTICE: &str = "Showing up to 100 recent prompts and final replies. Intermediate messages and tool activity are unavailable.";
 
 impl AppServerSession {
     /// Read a conflicting thread without taking its writer lease. This is a snapshot, not an
@@ -37,9 +39,8 @@ impl AppServerSession {
         thread_id: ThreadId,
     ) -> Result<(AppServerStartedThread, Option<&'static str>)> {
         let mut thread = self.thread_read(thread_id, /*include_turns*/ false).await?;
-        let mut history_notice = None;
-        if let Err(error) = self
-            .hydrate_initial_thread_history(
+        let history_notice = self
+            .hydrate_initial_thread_history_with_summary_fallback(
                 &mut thread,
                 /*turn_cursor*/ None,
                 /*item_cursor*/ None,
@@ -47,34 +48,7 @@ impl AppServerSession {
                 Some(local_settings),
                 HistoryHydrationScope::Initial,
             )
-            .await
-        {
-            if thread.history_mode == ThreadHistoryMode::Legacy {
-                return Err(error);
-            }
-            // Summary pages retain user messages and final replies without scanning
-            // every tool item when the item-paging endpoint is unavailable.
-            tracing::warn!("Failed to page read-only thread history; trying summary pages");
-            let request_id = self.next_request_id();
-            let page: ThreadTurnsListResponse = self
-                .client
-                .request_typed(ClientRequest::ThreadTurnsList {
-                    request_id,
-                    params: ThreadTurnsListParams {
-                        thread_id: thread_id.to_string(),
-                        cursor: None,
-                        limit: Some(READ_ONLY_HISTORY_TURN_LIMIT),
-                        sort_direction: Some(SortDirection::Desc),
-                        items_view: Some(TurnItemsView::Summary),
-                    },
-                })
-                .await?;
-            thread.turns = page.data.into_iter().rev().collect();
-            self.history_pagination.remove(&thread_id);
-            history_notice = Some(
-                "Showing up to 100 recent prompts and final replies. Intermediate messages and tool activity are unavailable.",
-            );
-        }
+            .await?;
         let session = thread_session_state_from_thread_response(
             &thread.id,
             crate::windows_sandbox::host_from_environments(thread.environments.as_deref()),
@@ -103,6 +77,7 @@ impl AppServerSession {
                 turns: thread.turns,
                 blocks_direct_input: false,
                 task_tools_available: false,
+                history_notice: None,
             },
             history_notice,
         ))
@@ -214,15 +189,17 @@ impl AppServerSession {
                 ));
             }
         };
-        self.hydrate_initial_thread_history(
-            &mut response.thread,
-            response.turns_backwards_cursor.clone(),
-            response.items_backwards_cursor.clone(),
-            Some(&config),
-            Some(local_settings),
-            HistoryHydrationScope::Initial,
-        )
-        .await?;
+        let history_notice = self
+            .hydrate_initial_thread_history_with_summary_fallback(
+                &mut response.thread,
+                response.turns_backwards_cursor.clone(),
+                response.items_backwards_cursor.clone(),
+                Some(&config),
+                Some(local_settings),
+                HistoryHydrationScope::Initial,
+            )
+            .await
+            .wrap_err("failed to load conversation history")?;
         let fork_parent_title = self
             .fork_parent_title_from_app_server(response.thread.forked_from_id.as_deref())
             .await;
@@ -234,11 +211,60 @@ impl AppServerSession {
         )
         .await?;
         started.session.fork_parent_title = fork_parent_title;
+        started.history_notice = history_notice;
         if self.task_tools_available(thread_id) {
             self.remember_task_tool_thread(thread_id);
             started.task_tools_available = true;
         }
         Ok(started)
+    }
+
+    async fn hydrate_initial_thread_history_with_summary_fallback(
+        &mut self,
+        thread: &mut codex_app_server_protocol::Thread,
+        turn_cursor: Option<String>,
+        item_cursor: Option<String>,
+        config: Option<&Config>,
+        local_settings: Option<&crate::local_settings::LocalSettings>,
+        scope: HistoryHydrationScope<'_>,
+    ) -> Result<Option<&'static str>> {
+        let thread_id = ThreadId::from_string(&thread.id)?;
+        if let Err(error) = self
+            .hydrate_initial_thread_history(
+                thread,
+                turn_cursor,
+                item_cursor,
+                config,
+                local_settings,
+                scope,
+            )
+            .await
+        {
+            if thread.history_mode == ThreadHistoryMode::Legacy {
+                return Err(error);
+            }
+            // Summary pages retain user messages and final replies without scanning
+            // every tool item when the item-paging endpoint is unavailable.
+            tracing::warn!("Failed to page thread history; trying summary pages");
+            let request_id = self.next_request_id();
+            let page: ThreadTurnsListResponse = self
+                .client
+                .request_typed(ClientRequest::ThreadTurnsList {
+                    request_id,
+                    params: ThreadTurnsListParams {
+                        thread_id: thread_id.to_string(),
+                        cursor: None,
+                        limit: Some(SUMMARY_HISTORY_TURN_LIMIT),
+                        sort_direction: Some(SortDirection::Desc),
+                        items_view: Some(TurnItemsView::Summary),
+                    },
+                })
+                .await?;
+            thread.turns = page.data.into_iter().rev().collect();
+            self.history_pagination.remove(&thread_id);
+            return Ok(Some(SUMMARY_HISTORY_NOTICE));
+        }
+        Ok(None)
     }
 }
 

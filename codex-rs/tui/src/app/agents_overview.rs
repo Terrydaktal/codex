@@ -575,7 +575,10 @@ impl App {
                     )
                     .await
                 {
-                    Ok(resumed) => (resumed, false),
+                    Ok(resumed) => {
+                        history_notice = resumed.history_notice;
+                        (resumed, false)
+                    }
                     Err(error) if crate::app_server_session::is_active_writer_error(&error) => {
                         match app_server
                             .read_thread_for_viewing(
@@ -598,6 +601,17 @@ impl App {
                                 return Ok(AppRunControl::Continue);
                             }
                         }
+                    }
+                    Err(error)
+                        if error
+                            .to_string()
+                            .contains("failed to load conversation history") =>
+                    {
+                        tracing::warn!(%error, "failed to load conversation history while attaching to task");
+                        self.add_agents_overview_error(
+                            "Couldn't load this conversation. Please try again.".to_string(),
+                        );
+                        return Ok(AppRunControl::Continue);
                     }
                     Err(error) => {
                         self.add_agents_overview_error(format!(
@@ -708,10 +722,10 @@ impl App {
                 self.ensure_thread_channel(root_thread_id)
                     .mark_external_writer();
                 self.chat_widget.show_external_writer_thread();
-                if let Some(notice) = history_notice {
-                    self.chat_widget
-                        .add_info_message(notice.to_string(), /*hint*/ None);
-                }
+            }
+            if let Some(notice) = history_notice {
+                self.chat_widget
+                    .add_info_message(notice.to_string(), /*hint*/ None);
             }
             let mut destination_config = self.chat_widget.config_ref().clone();
             if self.app_server_target.uses_remote_workspace() {

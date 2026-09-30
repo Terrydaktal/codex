@@ -629,6 +629,7 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            history_notice: None,
         },
         session_lifecycle::ThreadAttachPresentation::SessionLineage,
         /*initial_user_message*/ None,
@@ -5305,6 +5306,7 @@ async fn primary_thread_ignores_child_mcp_startup_notifications() {
             turns: Vec::new(),
             blocks_direct_input: false,
             task_tools_available: false,
+            history_notice: None,
         },
         &mut child_snapshot,
     )
@@ -6458,6 +6460,7 @@ async fn app_server_thread_replacement_clears_previous_transcript_before_replay(
             )],
             blocks_direct_input: false,
             task_tools_available: false,
+            history_notice: None,
         },
         session_lifecycle::ThreadAttachPresentation::SessionLineage,
         /*initial_user_message*/ None,
@@ -8824,6 +8827,7 @@ async fn refreshed_snapshot_session_persists_resumed_turns() {
             turns: resumed_turns.clone(),
             blocks_direct_input: true,
             task_tools_available: false,
+            history_notice: None,
         },
         &mut snapshot,
     )

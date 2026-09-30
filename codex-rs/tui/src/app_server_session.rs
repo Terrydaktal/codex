@@ -368,6 +368,7 @@ pub(crate) struct AppServerStartedThread {
     pub(crate) turns: Vec<Turn>,
     pub(crate) blocks_direct_input: bool,
     pub(crate) task_tools_available: bool,
+    pub(crate) history_notice: Option<&'static str>,
 }
 
 pub(crate) fn is_active_writer_error(err: &color_eyre::eyre::Report) -> bool {
@@ -2045,7 +2046,16 @@ pub(crate) fn thread_start_params_from_config(
             ThreadParamsMode::Remote => config_request_overrides_from_config(config),
         },
         ephemeral: Some(config.ephemeral),
-        history_mode: (!config.ephemeral).then_some(ThreadHistoryMode::Paginated),
+        // Embedded TUI sessions can be resumed by more than one local Codex process. Keep their
+        // canonical JSONL history in legacy mode so their transcript does not depend on an ordinal
+        // projection. `None` asks current app servers to choose their default, which is paginated,
+        // so local sessions must request legacy history explicitly. Remote app servers retain
+        // paginated history because the server owns the canonical writer.
+        history_mode: (!config.ephemeral).then_some(match thread_params_mode {
+            ThreadParamsMode::Embedded => ThreadHistoryMode::Legacy,
+            ThreadParamsMode::Remote => ThreadHistoryMode::Paginated,
+        }),
+        experimental_raw_events: matches!(thread_params_mode, ThreadParamsMode::Embedded),
         session_start_source,
         thread_source: Some(ThreadSource::User),
         developer_instructions: with_terminal_visualization_instructions(
@@ -2201,6 +2211,7 @@ async fn started_thread_from_start_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        history_notice: None,
     })
 }
 
@@ -2224,6 +2235,7 @@ async fn started_thread_from_resume_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        history_notice: None,
     })
 }
 
@@ -2247,6 +2259,7 @@ async fn started_thread_from_fork_response(
         turns: response.thread.turns,
         blocks_direct_input,
         task_tools_available: false,
+        history_notice: None,
     })
 }
 
@@ -2859,6 +2872,17 @@ mod tests {
             app_server.remote_cwd_override = Some(workspace.clone());
 
             let started = app_server.start_thread(&config).await?;
+            let thread = app_server
+                .thread_read(started.session.thread_id, /*include_turns*/ false)
+                .await?;
+            let expected_history_mode = match mode {
+                ThreadParamsMode::Embedded => ThreadHistoryMode::Legacy,
+                ThreadParamsMode::Remote => ThreadHistoryMode::Paginated,
+            };
+            assert_eq!(
+                thread.history_mode, expected_history_mode,
+                "{mode:?} thread history mode"
+            );
 
             assert_eq!(
                 (
@@ -2915,6 +2939,8 @@ mod tests {
         assert_eq!(params.model_provider, Some(config.model_provider_id));
         assert_eq!(params.thread_source, Some(ThreadSource::User));
         assert_eq!(params.dynamic_tools, None);
+        assert_eq!(params.history_mode, Some(ThreadHistoryMode::Legacy));
+        assert!(params.experimental_raw_events);
     }
 
     #[tokio::test]
@@ -3160,6 +3186,7 @@ mod tests {
         );
 
         assert_eq!(start.cwd, None);
+        assert_eq!(start.history_mode, Some(ThreadHistoryMode::Paginated));
         assert_eq!(resume.cwd, None);
         assert_eq!(fork.cwd, None);
         assert_eq!(start.runtime_workspace_roots, None);
