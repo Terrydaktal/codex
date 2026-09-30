@@ -104,6 +104,18 @@ pub(crate) struct SessionState {
     next_turn_is_first: bool,
 }
 
+pub(crate) struct RecordTokenUsageParams<'a> {
+    pub(crate) thread_id: ThreadId,
+    pub(crate) turn_id: &'a str,
+    pub(crate) session_id: SessionId,
+    pub(crate) root_turn_id: String,
+    pub(crate) response_id: &'a str,
+    pub(crate) account_id: Option<&'a str>,
+    pub(crate) model: &'a str,
+    pub(crate) service_tier: Option<&'a str>,
+    pub(crate) usage: &'a TokenUsage,
+}
+
 impl SessionState {
     /// Create a new session state mirroring previous `State::default()` semantics.
     #[cfg(test)]
@@ -214,13 +226,19 @@ impl SessionState {
 
     pub(crate) fn record_token_usage(
         &mut self,
-        thread_id: ThreadId,
-        turn_id: &str,
-        session_id: SessionId,
-        root_turn_id: String,
-        response_id: String,
-        usage: &TokenUsage,
+        params: RecordTokenUsageParams<'_>,
     ) -> TokenUsageRecord {
+        let RecordTokenUsageParams {
+            thread_id,
+            turn_id,
+            session_id,
+            root_turn_id,
+            response_id,
+            account_id,
+            model,
+            service_tier,
+            usage,
+        } = params;
         let mut turn_token_usage = self
             .latest_token_usage_record
             .as_ref()
@@ -241,7 +259,10 @@ impl SessionState {
             turn_id: turn_id.to_string(),
             session_id,
             root_turn_id,
-            response_id,
+            response_id: response_id.to_string(),
+            account_id: account_id.map(str::to_string),
+            model: Some(model.to_string()),
+            service_tier: service_tier.map(str::to_string),
             usage: usage.clone(),
             turn_token_usage,
             thread_token_usage,

@@ -25,18 +25,25 @@ async fn record_token_usage_continues_restored_totals() {
         session_id,
         root_turn_id: "root-turn".to_string(),
         response_id: "response-c".to_string(),
+        account_id: None,
+        model: Some("gpt-5".to_string()),
+        service_tier: None,
         usage: usage(30),
         turn_token_usage: usage(30),
         thread_token_usage: usage(230),
     });
-    let after_resume = restored.record_token_usage(
+    let response_usage = usage(20);
+    let after_resume = restored.record_token_usage(RecordTokenUsageParams {
         thread_id,
-        "turn-b",
+        turn_id: "turn-b",
         session_id,
-        "root-turn".to_string(),
-        "response-d".to_string(),
-        &usage(20),
-    );
+        root_turn_id: "root-turn".to_string(),
+        response_id: "response-d",
+        account_id: None,
+        model: "gpt-5",
+        service_tier: None,
+        usage: &response_usage,
+    });
     assert_eq!(
         after_resume,
         TokenUsageRecord {
@@ -45,6 +52,9 @@ async fn record_token_usage_continues_restored_totals() {
             session_id,
             root_turn_id: "root-turn".to_string(),
             response_id: "response-d".to_string(),
+            account_id: None,
+            model: Some("gpt-5".to_string()),
+            service_tier: None,
             usage: usage(20),
             turn_token_usage: usage(50),
             thread_token_usage: usage(250),

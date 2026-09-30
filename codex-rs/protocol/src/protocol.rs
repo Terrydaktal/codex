@@ -2267,6 +2267,15 @@ pub struct TokenUsageRecord {
     pub session_id: SessionId,
     pub root_turn_id: String,
     pub response_id: String,
+    /// ChatGPT workspace/account identifier for this response, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    /// Model that produced this response, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Service tier selected for this response, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
     pub usage: TokenUsage,
     pub turn_token_usage: TokenUsage,
     pub thread_token_usage: TokenUsage,
@@ -2343,6 +2352,19 @@ impl TokenUsageInfo {
 pub struct TokenCountEvent {
     pub info: Option<TokenUsageInfo>,
     pub rate_limits: Option<RateLimitSnapshot>,
+    /// ChatGPT workspace/account identifier for the response, when available.
+    ///
+    /// Older rollout events omit this field and are therefore not attributable
+    /// to one account by offline usage reconciliation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    /// Model used for the response whose usage is represented by this event.
+    /// Older rollout events omit this field and fall back to their turn context.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Service tier used for the response, when one was explicitly selected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
@@ -4602,6 +4624,34 @@ mod tests {
                 .contains_key("builtin")
         );
         assert!(!HookRunSummary::decl().contains("builtin:"));
+        Ok(())
+    }
+
+    #[test]
+    fn token_count_event_preserves_response_metadata_and_reads_legacy_payload() -> Result<()> {
+        let event = TokenCountEvent {
+            info: None,
+            rate_limits: None,
+            account_id: None,
+            model: Some("gpt-5.6-luna".to_string()),
+            service_tier: Some("priority".to_string()),
+        };
+
+        assert_eq!(
+            serde_json::to_value(&event)?,
+            json!({
+                "info": null,
+                "rate_limits": null,
+                "model": "gpt-5.6-luna",
+                "service_tier": "priority"
+            })
+        );
+        let legacy_event: TokenCountEvent = serde_json::from_value(json!({
+            "info": null,
+            "rate_limits": null
+        }))?;
+        assert!(legacy_event.model.is_none());
+        assert!(legacy_event.service_tier.is_none());
         Ok(())
     }
 

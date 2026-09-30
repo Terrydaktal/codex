@@ -3945,6 +3945,9 @@ async fn cold_paginated_resume_restores_usage_without_loading_turns() -> Result<
                 model_context_window: Some(200_000),
             }),
             rate_limits: None,
+            account_id: None,
+            model: None,
+            service_tier: None,
         })),
     )
     .await?;
@@ -4022,6 +4025,9 @@ async fn cold_paginated_resume_omits_usage_when_its_turn_is_ambiguous() -> Resul
                 model_context_window: Some(200_000),
             }),
             rate_limits: None,
+            account_id: None,
+            model: None,
+            service_tier: None,
         })),
     )
     .await?;
@@ -4286,6 +4292,7 @@ async fn thread_resume_token_usage_replay_can_belong_to_interrupted_turn() -> Re
             "timestamp": meta_rfc3339,
             "type": "event_msg",
             "payload": serde_json::to_value(EventMsg::TokenCount(TokenCountEvent {
+                account_id: None,
                 info: Some(TokenUsageInfo {
                     total_token_usage: TokenUsage {
                         input_tokens: 180,
@@ -4308,6 +4315,8 @@ async fn thread_resume_token_usage_replay_can_belong_to_interrupted_turn() -> Re
                     model_context_window: Some(200_000),
                 }),
                 rate_limits: None,
+                model: None,
+                service_tier: None,
             }))?,
         })
         .to_string(),

@@ -115,6 +115,7 @@ pub fn create_fake_rollout_with_token_usage(
         /*git_info*/ None,
     )?;
     let payload = serde_json::to_value(EventMsg::TokenCount(TokenCountEvent {
+        account_id: None,
         info: Some(TokenUsageInfo {
             total_token_usage: TokenUsage {
                 input_tokens: 120,
@@ -137,6 +138,8 @@ pub fn create_fake_rollout_with_token_usage(
             model_context_window: Some(200_000),
         }),
         rate_limits: None,
+        model: None,
+        service_tier: None,
     }))?;
     let file_path = rollout_path(codex_home, filename_ts, &thread_id);
     let line = json!({

@@ -1306,6 +1306,9 @@ async fn resumed_paginated_rollout_continues_after_decimal_token_count() -> std:
         .record_canonical_items(&[RolloutItem::EventMsg(EventMsg::TokenCount(
             TokenCountEvent {
                 info: None,
+                account_id: None,
+                model: None,
+                service_tier: None,
                 rate_limits: Some(RateLimitSnapshot {
                     limit_id: None,
                     limit_name: None,

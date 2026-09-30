@@ -3549,6 +3549,7 @@ mod tests {
         );
         let items = vec![RolloutItem::EventMsg(EventMsg::TokenCount(
             codex_protocol::protocol::TokenCountEvent {
+                account_id: None,
                 info: Some(codex_protocol::protocol::TokenUsageInfo {
                     total_token_usage: codex_protocol::protocol::TokenUsage {
                         input_tokens: 0,
@@ -3563,6 +3564,8 @@ mod tests {
                     model_context_window: None,
                 }),
                 rate_limits: None,
+                model: None,
+                service_tier: None,
             },
         ))];
         let override_updated_at =
