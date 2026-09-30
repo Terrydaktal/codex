@@ -495,7 +495,10 @@ impl App {
                     )
                     .await
                 {
-                    Ok(Ok(resumed)) => Ok(resumed),
+                    Ok(Ok(resumed)) => {
+                        history_notice = resumed.history_notice;
+                        Ok(resumed)
+                    }
                     Ok(Err(err)) if crate::app_server_session::is_active_writer_error(&err) => {
                         read_only_thread = true;
                         match startup_draft
@@ -897,10 +900,10 @@ See the Codex keymap documentation for supported actions and examples."
             if read_only_thread {
                 app.ensure_thread_channel(thread_id).mark_external_writer();
                 app.chat_widget.show_external_writer_thread();
-                if let Some(notice) = history_notice {
-                    app.chat_widget
-                        .add_info_message(notice.to_string(), /*hint*/ None);
-                }
+            }
+            if let Some(notice) = history_notice {
+                app.chat_widget
+                    .add_info_message(notice.to_string(), /*hint*/ None);
             }
             if !read_only_thread
                 && should_prompt_for_paused_goal_after_startup_resume

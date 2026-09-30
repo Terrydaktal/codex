@@ -1480,7 +1480,7 @@ async fn older_external_server_starts_without_unsupported_dynamic_tools_or_histo
         HistoryCapabilities::LegacyDynamicToolsAndHistory,
         /*blocked_thread_list*/ None,
         /*failed_thread_name*/ None,
-        crate::app_server_session::ThreadParamsMode::Embedded,
+        crate::app_server_session::ThreadParamsMode::Remote,
         LoaderOverrides::default(),
     )
     .await?;
@@ -1492,7 +1492,7 @@ async fn older_external_server_starts_without_unsupported_dynamic_tools_or_histo
         app_server.request_handle(),
         &app.local_settings,
         app.config.clone(),
-        crate::app_server_session::ThreadParamsMode::Embedded,
+        crate::app_server_session::ThreadParamsMode::Remote,
         /*remote_cwd_override*/ None,
         app_server.thread_tool_transport(),
     )
@@ -2344,7 +2344,7 @@ async fn remote_legacy_history_start_negotiates_once_for_resume_and_fork() -> Re
         HistoryCapabilities::LegacyOnly,
         /*blocked_thread_list*/ None,
         /*failed_thread_name*/ None,
-        crate::app_server_session::ThreadParamsMode::Embedded,
+        crate::app_server_session::ThreadParamsMode::Remote,
         LoaderOverrides::default(),
     )
     .await?;
@@ -2437,7 +2437,7 @@ async fn remote_legacy_history_start_retries_unsupported_paginated_variant() -> 
         HistoryCapabilities::LegacyOnlyUnsupportedVariant,
         /*blocked_thread_list*/ None,
         /*failed_thread_name*/ None,
-        crate::app_server_session::ThreadParamsMode::Embedded,
+        crate::app_server_session::ThreadParamsMode::Remote,
         LoaderOverrides::default(),
     )
     .await?;
@@ -2469,7 +2469,7 @@ async fn assert_remote_legacy_history_retry(request: LegacyHistoryRequest) -> Re
         HistoryCapabilities::LegacyOnly,
         /*blocked_thread_list*/ None,
         /*failed_thread_name*/ None,
-        crate::app_server_session::ThreadParamsMode::Embedded,
+        crate::app_server_session::ThreadParamsMode::Remote,
         LoaderOverrides::default(),
     )
     .await?;
@@ -3498,7 +3498,6 @@ terminal_visualization_instructions = true
     for mode in [ManagedWorktreeMode::New, ManagedWorktreeMode::Fork] {
         requests.lock().expect("request recorder lock").clear();
         let previous = app.chat_widget.thread_id();
-        let previous_rollout = app.chat_widget.rollout_path().expect("previous rollout");
         app.handle_event(
             &mut tui,
             &mut server,
@@ -3561,19 +3560,9 @@ terminal_visualization_instructions = true
             "type": "message", "role": "assistant", "content": [{"type": "output_text", "text": format!("replacement persistence probe {mode:?}")}]
         }))?]).await?;
         let rollout = app.chat_widget.rollout_path().expect("replacement rollout");
-        let mut history = fs::read(&rollout)?;
+        let history = fs::read(&rollout)?;
         let metadata = codex_rollout::read_session_meta_line(&rollout).await?;
-        assert_eq!(metadata.meta.history_base.is_some(), fork);
-        if let Some(base) = metadata.meta.history_base {
-            assert!(fork, "New must not inherit history");
-            assert_eq!(Some(base.thread_id), previous);
-            let parent = fs::read(&previous_rollout)?;
-            history.extend_from_slice(
-                parent
-                    .get(..usize::try_from(base.end_byte_offset)?)
-                    .expect("valid inherited prefix"),
-            );
-        }
+        assert_eq!(metadata.meta.history_base, None);
         let history = String::from_utf8(history)?;
         assert!(!history.contains("managed fork history"));
         if fork {
