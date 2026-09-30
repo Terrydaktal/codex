@@ -30,6 +30,11 @@ fn token_usage_delta_clamps_each_counter_at_zero() {
 }
 
 #[test]
+fn local_tool_time_uses_the_union_of_overlapping_intervals() {
+    assert_eq!(union_duration_ms(&[(0, 100), (50, 150), (200, 250)]), 200);
+}
+
+#[test]
 fn weekly_limit_used_percent_uses_model_credit_rates() {
     let usage = TokenUsage {
         input_tokens: 337_141,

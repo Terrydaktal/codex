@@ -59,6 +59,8 @@ use opentelemetry_sdk::metrics::data::ResourceMetrics;
 use reqwest::Error;
 use reqwest::Response;
 use std::future::Future;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::time::error::Elapsed;
@@ -120,6 +122,7 @@ pub struct SessionTelemetry {
     pub(crate) metadata: SessionTelemetryMetadata,
     pub(crate) metrics: Option<MetricsClient>,
     pub(crate) metrics_use_metadata_tags: bool,
+    runtime_timing: Arc<Mutex<RuntimeMetricsSummary>>,
 }
 
 impl SessionTelemetry {
@@ -353,6 +356,10 @@ impl SessionTelemetry {
     /// Records time to first token as both a metric and a production telemetry event.
     pub fn record_turn_ttft(&self, duration: Duration) {
         self.record_duration(TURN_TTFT_DURATION_METRIC, duration, &[]);
+        self.merge_runtime_timing(RuntimeMetricsSummary {
+            turn_ttft_ms: duration.as_millis().min(u64::MAX as u128) as u64,
+            ..RuntimeMetricsSummary::default()
+        });
         log_and_trace_event!(
             self,
             common: {
@@ -507,6 +514,7 @@ impl SessionTelemetry {
 
     /// Collect and discard a runtime metrics snapshot to reset delta accumulators.
     pub fn reset_runtime_metrics(&self) {
+        let _ = self.take_runtime_timing();
         if self.metrics.is_none() {
             return;
         }
@@ -517,18 +525,29 @@ impl SessionTelemetry {
 
     /// Collect a runtime metrics summary if debug snapshots are available.
     pub fn runtime_metrics_summary(&self) -> Option<RuntimeMetricsSummary> {
-        let snapshot = match self.snapshot_metrics() {
-            Ok(snapshot) => snapshot,
-            Err(_) => {
-                return None;
-            }
-        };
-        let summary = RuntimeMetricsSummary::from_snapshot(&snapshot);
+        let mut summary = self.snapshot_metrics().map_or_else(
+            |_| RuntimeMetricsSummary::default(),
+            |snapshot| RuntimeMetricsSummary::from_snapshot(&snapshot),
+        );
+        summary.merge(self.take_runtime_timing());
         if summary.is_empty() {
             None
         } else {
             Some(summary)
         }
+    }
+
+    fn merge_runtime_timing(&self, timing: RuntimeMetricsSummary) {
+        if let Ok(mut current) = self.runtime_timing.lock() {
+            current.merge(timing);
+        }
+    }
+
+    fn take_runtime_timing(&self) -> RuntimeMetricsSummary {
+        let Ok(mut current) = self.runtime_timing.lock() else {
+            return RuntimeMetricsSummary::default();
+        };
+        std::mem::take(&mut *current)
     }
 
     fn tags_with_metadata<'a>(
@@ -602,6 +621,7 @@ impl SessionTelemetry {
             },
             metrics: crate::metrics::global(),
             metrics_use_metadata_tags: true,
+            runtime_timing: Arc::new(Mutex::new(RuntimeMetricsSummary::default())),
         }
     }
 
@@ -1308,17 +1328,22 @@ impl SessionTelemetry {
 
     fn record_responses_websocket_timing_metrics(&self, value: &serde_json::Value) {
         let timing_metrics = value.get(RESPONSES_WEBSOCKET_TIMING_METRICS_FIELD);
+        let mut runtime_timing = RuntimeMetricsSummary::default();
 
         let overhead_value =
             timing_metrics.and_then(|value| value.get(RESPONSES_API_OVERHEAD_FIELD));
         if let Some(duration) = duration_from_ms_value(overhead_value) {
             self.record_duration(RESPONSES_API_OVERHEAD_DURATION_METRIC, duration, &[]);
+            runtime_timing.responses_api_overhead_ms =
+                duration.as_millis().min(u64::MAX as u128) as u64;
         }
 
         let inference_value =
             timing_metrics.and_then(|value| value.get(RESPONSES_API_INFERENCE_FIELD));
         if let Some(duration) = duration_from_ms_value(inference_value) {
             self.record_duration(RESPONSES_API_INFERENCE_TIME_DURATION_METRIC, duration, &[]);
+            runtime_timing.responses_api_inference_time_ms =
+                duration.as_millis().min(u64::MAX as u128) as u64;
         }
 
         let engine_iapi_ttft_value =
@@ -1329,6 +1354,8 @@ impl SessionTelemetry {
                 duration,
                 &[],
             );
+            runtime_timing.responses_api_engine_iapi_ttft_ms =
+                duration.as_millis().min(u64::MAX as u128) as u64;
         }
 
         let engine_service_ttft_value =
@@ -1339,6 +1366,8 @@ impl SessionTelemetry {
                 duration,
                 &[],
             );
+            runtime_timing.responses_api_engine_service_ttft_ms =
+                duration.as_millis().min(u64::MAX as u128) as u64;
         }
 
         let engine_iapi_tbt_value =
@@ -1349,6 +1378,7 @@ impl SessionTelemetry {
                 duration_ms,
                 &[],
             );
+            runtime_timing.responses_api_engine_iapi_tbt_ms = duration_ms;
         }
 
         let engine_service_tbt_value =
@@ -1359,7 +1389,9 @@ impl SessionTelemetry {
                 duration_ms,
                 &[],
             );
+            runtime_timing.responses_api_engine_service_tbt_ms = duration_ms;
         }
+        self.merge_runtime_timing(runtime_timing);
     }
 
     fn responses_type(event: &ResponseEvent) -> String {

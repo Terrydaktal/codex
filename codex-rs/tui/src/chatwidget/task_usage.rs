@@ -72,6 +72,15 @@ impl TaskUsageContribution {
 
 type TaskDiffStats = WorkspaceDiffStats;
 
+#[derive(Debug, Default)]
+struct TaskTiming {
+    duration_ms: Option<i64>,
+    finished_at: Option<i64>,
+    runtime_metrics: RuntimeMetricsSummary,
+    first_output_ms: Option<u64>,
+    local_tool_duration_ms: u64,
+}
+
 impl ChatWidget {
     pub(super) fn capture_task_usage_baseline(&mut self) {
         let model = self.current_model().to_string();
@@ -95,6 +104,26 @@ impl ChatWidget {
             first_output_ms: None,
             local_tool_intervals_ms: Vec::new(),
         });
+    }
+
+    pub(super) fn record_task_first_output(&mut self) {
+        if let Some(baseline) = self.turn_lifecycle.task_usage_baseline.as_mut()
+            && baseline.first_output_ms.is_none()
+        {
+            baseline.first_output_ms =
+                u64::try_from(baseline.started_at.elapsed().as_millis()).ok();
+        }
+    }
+
+    pub(super) fn record_task_local_tool_duration(&mut self, duration_ms: Option<i64>) {
+        if let Some(duration_ms) = duration_ms.and_then(|value| u64::try_from(value).ok())
+            && let Some(baseline) = self.turn_lifecycle.task_usage_baseline.as_mut()
+        {
+            let end_ms =
+                u64::try_from(baseline.started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let start_ms = end_ms.saturating_sub(duration_ms);
+            baseline.local_tool_intervals_ms.push((start_ms, end_ms));
+        }
     }
 
     pub(super) fn record_task_response_usage(
@@ -263,6 +292,32 @@ fn token_usage_add_assign(total: &mut TokenUsage, contribution: &TokenUsage) {
         .reasoning_output_tokens
         .saturating_add(contribution.reasoning_output_tokens);
     total.total_tokens = total.total_tokens.saturating_add(contribution.total_tokens);
+}
+
+fn union_duration_ms(intervals: &[(u64, u64)]) -> u64 {
+    let mut intervals = intervals
+        .iter()
+        .copied()
+        .filter(|(start, end)| start < end)
+        .collect::<Vec<_>>();
+    intervals.sort_unstable();
+
+    let Some((mut current_start, mut current_end)) = intervals.first().copied() else {
+        return 0;
+    };
+    let mut total = 0u64;
+
+    for (start, end) in intervals.into_iter().skip(1) {
+        if start > current_end {
+            total = total.saturating_add(current_end - current_start);
+            current_start = start;
+            current_end = end;
+        } else {
+            current_end = current_end.max(end);
+        }
+    }
+
+    total.saturating_add(current_end - current_start)
 }
 
 fn token_usage_percentage_units(
