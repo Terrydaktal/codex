@@ -26,10 +26,16 @@ fn owned_startup_keeps_the_live_bottom_geometry() {
         })
         .collect::<Vec<_>>()
         .join("\n");
+    let version_label = format!("v{})", crate::version::CODEX_CLI_VERSION);
+    let version_placeholder = format!(
+        "v<VERSION>){:padding$}",
+        "",
+        padding = crate::version::CODEX_CLI_VERSION.len().saturating_sub(5)
+    );
     insta::assert_snapshot!(
         "owned_startup_layout",
         format!("cursor={:?}\n{frame}", layout.cursor_pos(area))
-            .replace(crate::version::CODEX_CLI_VERSION, "<VERSION>")
+            .replace(version_label.as_str(), version_placeholder.as_str())
     );
 }
 

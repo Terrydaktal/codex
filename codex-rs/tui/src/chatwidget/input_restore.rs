@@ -311,6 +311,13 @@ impl ChatWidget {
     /// separated by newlines rather than auto-submitting the next one.
     pub(super) fn on_interrupted_turn(&mut self, reason: TurnAbortReason) {
         self.requeue_image_submission();
+        self.collect_runtime_metrics_delta();
+        let task_usage_summary = if self.has_chatgpt_account {
+            self.defer_task_usage_summary(/*duration_ms*/ None, self.turn_runtime_metrics);
+            None
+        } else {
+            self.take_task_usage_summary(/*duration_ms*/ None, self.turn_runtime_metrics)
+        };
         // Finalize, log a gentle prompt, and clear running state.
         self.finalize_turn();
         let send_pending_steers_immediately =
@@ -391,6 +398,9 @@ impl ChatWidget {
             self.restore_composer_state(combined);
         }
         self.refresh_pending_input_preview();
+        if let Some(task_usage_summary) = task_usage_summary {
+            self.append_task_usage_summary(task_usage_summary);
+        }
         self.request_redraw();
     }
 

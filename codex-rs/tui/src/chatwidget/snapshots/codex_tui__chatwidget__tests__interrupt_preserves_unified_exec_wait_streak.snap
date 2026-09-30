@@ -2,5 +2,17 @@
 source: tui/src/chatwidget/tests/exec_flow.rs
 expression: snapshot
 ---
-cells=1
+cells=2
 ■ Conversation interrupted - use /feedback if something went wrong
+
+
+────────────────────────────────────────────────────────────────────────────────
+• weekly limit remaining:   100%
+• tokens: total:            0 (0%)
+          cached-input:     0 (0%)
+          non-cached-input: 0 (0%)
+          normal-output:    0 (0%)
+          reasoning-output: 0 (0%)
+• files created 0 · deleted 0 · modified 0 · lines +0 / -0
+• time wall 0ms · finished 2026-01-01 00:00:00
+────────────────────────────────────────────────────────────────────────────────

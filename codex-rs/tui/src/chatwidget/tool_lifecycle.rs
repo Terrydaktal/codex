@@ -164,9 +164,18 @@ impl ChatWidget {
     }
 
     pub(crate) fn handle_file_change_completed_now(&mut self, item: ThreadItem) {
-        let ThreadItem::FileChange { status, .. } = item else {
+        let ThreadItem::FileChange {
+            status, changes, ..
+        } = item
+        else {
             return;
         };
+        if matches!(
+            status,
+            codex_app_server_protocol::PatchApplyStatus::Completed
+        ) {
+            self.record_task_file_changes(&changes);
+        }
         // If the patch was successful, just let the "Edited" block stand.
         // Otherwise, add a failure block.
         if matches!(status, codex_app_server_protocol::PatchApplyStatus::Failed) {

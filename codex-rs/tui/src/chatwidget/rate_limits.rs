@@ -383,6 +383,10 @@ impl ChatWidget {
                 );
                 self.rate_limit_snapshots_by_limit_id
                     .insert(limit_id, display);
+                if is_codex_limit {
+                    let plan_remaining = self.weekly_plan_remaining_percent();
+                    self.observe_weekly_plan_remaining(plan_remaining);
+                }
             }
 
             if !warnings.is_empty() {

@@ -1,6 +1,138 @@
 use super::*;
 
 #[test]
+fn task_usage_lines_show_colored_task_summary() {
+    let usage = TokenUsage {
+        input_tokens: 12_726_447,
+        cached_input_tokens: 12_393_984,
+        output_tokens: 22_477,
+        reasoning_output_tokens: 10_418,
+        total_tokens: 12_748_924,
+    };
+
+    let runtime_metrics = RuntimeMetricsSummary {
+        tool_calls: codex_otel::RuntimeMetricTotals {
+            count: 3,
+            duration_ms: 101_700,
+        },
+        responses_api_overhead_ms: 2_100,
+        responses_api_inference_time_ms: 21_400,
+        turn_ttft_ms: 4_000,
+        ..RuntimeMetricsSummary::default()
+    };
+
+    insta::assert_debug_snapshot!(task_usage_lines(
+        "gpt-5.6-luna",
+        &usage,
+        Some(1.896359333333333),
+        Some(49.645),
+        Some(50.0),
+        TaskDiffStats {
+            files_changed: 2,
+            files_created: 0,
+            files_deleted: 0,
+            lines_added: 115,
+            lines_removed: 0,
+        },
+        TaskTiming {
+            duration_ms: Some(740_800),
+            runtime_metrics,
+            ..TaskTiming::default()
+        },
+    ));
+}
+
+#[test]
+fn task_usage_lines_show_task_finished_timestamp() {
+    let finished_at = 1_750_000_000;
+    let lines = task_usage_lines(
+        "gpt-5.6-luna",
+        &TokenUsage::default(),
+        None,
+        None,
+        None,
+        TaskDiffStats::default(),
+        TaskTiming {
+            finished_at: Some(finished_at),
+            ..TaskTiming::default()
+        },
+    );
+
+    let rendered = lines
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(rendered.contains(&format!(" · finished {}", format_finished_at(finished_at))));
+}
+
+#[test]
+fn task_usage_lines_omit_unavailable_telemetry_without_na_values() {
+    let lines = task_usage_lines(
+        "gpt-5.6-luna",
+        &TokenUsage::default(),
+        Some(0.0),
+        None,
+        Some(77.0),
+        TaskDiffStats::default(),
+        TaskTiming {
+            duration_ms: Some(99_000),
+            first_output_ms: Some(8_300),
+            local_tool_duration_ms: 14_700,
+            ..TaskTiming::default()
+        },
+    );
+
+    let rendered = lines
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!rendered.contains("n/a"));
+    assert!(rendered.contains("files created 0 · deleted 0 · modified 0 · lines +0 / -0"));
+    assert!(rendered.contains("time wall 1m 39.0s (local tools 14.7s) · first output 8.3s"));
+}
+
+#[test]
+fn task_usage_durations_show_minutes_and_hours_when_needed() {
+    assert_eq!(format_duration_ms(59_949), "59.9s");
+    assert_eq!(format_duration_ms(59_999), "1m 0.0s");
+    assert_eq!(format_duration_ms(60_000), "1m 0.0s");
+    assert_eq!(format_duration_ms(3_661_250), "1h 1m 1.3s");
+}
+
+#[test]
+fn task_usage_summary_history_cell_has_one_divider_on_each_side() {
+    let cell = TaskUsageSummaryHistoryCell::new(vec![Line::from("summary")]);
+    let rendered = cell
+        .display_lines(20)
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        rendered,
+        vec!["────────────────────", "summary", "────────────────────"]
+    );
+}
+
+#[test]
+fn token_percentage_breakdown_sums_to_displayed_total() {
+    let usage = TokenUsage {
+        input_tokens: 12_726_447,
+        cached_input_tokens: 12_393_984,
+        output_tokens: 22_477,
+        reasoning_output_tokens: 10_418,
+        total_tokens: 12_748_924,
+    };
+
+    let percentages = token_usage_percentage_units("gpt-5.6-luna", &usage, Some(1.896359333333333))
+        .expect("known model should have a token percentage breakdown");
+
+    assert_eq!(percentages.iter().sum::<i64>(), 18_964);
+}
+
+#[test]
 fn token_usage_delta_clamps_each_counter_at_zero() {
     let start = TokenUsage {
         input_tokens: 100,

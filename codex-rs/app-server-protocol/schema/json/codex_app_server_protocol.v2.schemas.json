@@ -18347,6 +18347,139 @@
       ],
       "type": "object"
     },
+    "TaskUsageSummaryEvent": {
+      "properties": {
+        "cachedInputTokens": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "calculatedWeeklyRemainingPercent": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "filesChanged": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "filesCreated": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "filesDeleted": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "filesModified": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "finishedAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "firstOutputMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "inputTokens": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "linesAdded": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "linesRemoved": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "localToolTimeMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "modelTimeMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "outputTokens": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "overheadTimeMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "planRemainingPercent": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "reasoningOutputTokens": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "totalTokens": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "turnId": {
+          "type": "string"
+        },
+        "wallTimeMs": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "weeklyLimitUsedPercent": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "cachedInputTokens",
+        "filesChanged",
+        "filesCreated",
+        "filesDeleted",
+        "filesModified",
+        "inputTokens",
+        "linesAdded",
+        "linesRemoved",
+        "model",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "totalTokens",
+        "turnId"
+      ],
+      "type": "object"
+    },
     "TerminalInteractionNotification": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "properties": {
@@ -20275,6 +20408,30 @@
             "type"
           ],
           "title": "ContextCompactionThreadItem",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "summary": {
+              "$ref": "#/definitions/TaskUsageSummaryEvent"
+            },
+            "type": {
+              "enum": [
+                "taskUsageSummary"
+              ],
+              "title": "TaskUsageSummaryThreadItemType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "summary",
+            "type"
+          ],
+          "title": "TaskUsageSummaryThreadItem",
           "type": "object"
         }
       ]

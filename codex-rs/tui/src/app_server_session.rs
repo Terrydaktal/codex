@@ -100,6 +100,8 @@ use codex_app_server_protocol::ThreadMetadataUpdateParams;
 use codex_app_server_protocol::ThreadMetadataUpdateResponse;
 use codex_app_server_protocol::ThreadReadParams;
 use codex_app_server_protocol::ThreadReadResponse;
+use codex_app_server_protocol::ThreadRecordTaskUsageParams;
+use codex_app_server_protocol::ThreadRecordTaskUsageResponse;
 use codex_app_server_protocol::ThreadResumeParams;
 use codex_app_server_protocol::ThreadResumeResponse;
 use codex_app_server_protocol::ThreadSetNameParams;
@@ -141,6 +143,7 @@ use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ModelUpgrade;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::protocol::SubAgentSource;
+use codex_protocol::protocol::TaskUsageSummaryEvent;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path_uri::PathUri;
 use color_eyre::eyre::ContextCompat;
@@ -1272,6 +1275,24 @@ impl AppServerSession {
             })
             .await
             .wrap_err("thread/inject_items failed during TUI side conversation setup")
+    }
+
+    pub(crate) async fn thread_record_task_usage(
+        &mut self,
+        thread_id: ThreadId,
+        summary: TaskUsageSummaryEvent,
+    ) -> Result<ThreadRecordTaskUsageResponse> {
+        let request_id = self.next_request_id();
+        self.client
+            .request_typed(ClientRequest::ThreadRecordTaskUsage {
+                request_id,
+                params: ThreadRecordTaskUsageParams {
+                    thread_id: thread_id.to_string(),
+                    summary,
+                },
+            })
+            .await
+            .wrap_err("thread/recordTaskUsage failed in TUI")
     }
 
     #[allow(clippy::too_many_arguments)]

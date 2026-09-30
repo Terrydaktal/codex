@@ -1735,6 +1735,10 @@ impl App {
                                 }),
                             );
                         }
+                        RateLimitRefreshOrigin::TaskCompletion { request_id } => {
+                            self.chat_widget
+                                .finish_task_usage_rate_limit_refresh(request_id, snapshots);
+                        }
                     }
                 }
                 Err(err) => {
@@ -1779,6 +1783,10 @@ impl App {
                                 Vec::new(),
                                 Err(err),
                             );
+                        }
+                        RateLimitRefreshOrigin::TaskCompletion { request_id } => {
+                            self.chat_widget
+                                .finish_task_usage_rate_limit_refresh(request_id, Vec::new());
                         }
                     }
                 }

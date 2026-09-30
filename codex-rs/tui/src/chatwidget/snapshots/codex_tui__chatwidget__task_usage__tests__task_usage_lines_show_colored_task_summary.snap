@@ -1,0 +1,66 @@
+---
+source: tui/src/chatwidget/task_usage_tests.rs
+assertion_line: 24
+expression: "task_usage_lines(\"gpt-5.6-luna\", &usage, Some(1.896359333333333),\nSome(49.645), Some(50.0), TaskDiffStats\n{\n    files_changed: 2, files_created: 0, files_deleted: 0, lines_added: 115,\n    lines_removed: 0,\n}, TaskTiming\n{ duration_ms: Some(740_800), runtime_metrics, ..TaskTiming::default() },)"
+---
+[
+    Line::from_iter([
+        Span::from("• ").dim(),
+        Span::from("weekly limit remaining:   ").dim(),
+        Span::from("50%").cyan().bold(),
+    ]),
+    Line::from_iter([
+        Span::from("• ").dim(),
+        Span::from("tokens: total:            ").dim(),
+        Span::from("12,748,924").cyan().bold(),
+        Span::from(" (1.8964%)").cyan().bold(),
+    ]),
+    Line::from_iter([
+        Span::from("          ").dim(),
+        Span::from("cached-input:     ").dim(),
+        Span::from("12,393,984").magenta(),
+        Span::from(" (1.8098%)").magenta(),
+    ]),
+    Line::from_iter([
+        Span::from("          ").dim(),
+        Span::from("non-cached-input: ").dim(),
+        Span::from("332,463").cyan(),
+        Span::from(" (0.0616%)").cyan(),
+    ]),
+    Line::from_iter([
+        Span::from("          ").dim(),
+        Span::from("normal-output:    ").dim(),
+        Span::from("12,059").green(),
+        Span::from(" (0.0134%)").green(),
+    ]),
+    Line::from_iter([
+        Span::from("          ").dim(),
+        Span::from("reasoning-output: ").dim(),
+        Span::from("10,418").magenta(),
+        Span::from(" (0.0116%)").magenta(),
+    ]),
+    Line::from_iter([
+        Span::from("• ").dim(),
+        Span::from("files created ").dim(),
+        Span::from("0").green(),
+        Span::from(" · deleted ").dim(),
+        Span::from("0").red(),
+        Span::from(" · modified ").dim(),
+        Span::from("2").cyan(),
+        Span::from(" · lines +").dim(),
+        Span::from("115").green(),
+        Span::from(" / -").dim(),
+        Span::from("0").red(),
+    ]),
+    Line::from_iter([
+        Span::from("• ").dim(),
+        Span::from("time wall ").dim(),
+        Span::from("12m 20.8s").cyan().bold(),
+        Span::from(" (").dim(),
+        Span::from("local tools ").dim(),
+        Span::from("1m 41.7s").green(),
+        Span::from(")").dim(),
+        Span::from(" · first output ").dim(),
+        Span::from("4.0s").magenta(),
+    ]),
+]

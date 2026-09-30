@@ -4999,6 +4999,36 @@ class SubagentMigration(BaseModel):
     name: str
 
 
+class TaskUsageSummaryEvent(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    cached_input_tokens: Annotated[int, Field(alias="cachedInputTokens")]
+    calculated_weekly_remaining_percent: Annotated[
+        float | None, Field(alias="calculatedWeeklyRemainingPercent")
+    ] = None
+    files_changed: Annotated[int, Field(alias="filesChanged")]
+    files_created: Annotated[int, Field(alias="filesCreated")]
+    files_deleted: Annotated[int, Field(alias="filesDeleted")]
+    files_modified: Annotated[int, Field(alias="filesModified")]
+    finished_at: Annotated[int | None, Field(alias="finishedAt")] = None
+    first_output_ms: Annotated[int | None, Field(alias="firstOutputMs")] = None
+    input_tokens: Annotated[int, Field(alias="inputTokens")]
+    lines_added: Annotated[int, Field(alias="linesAdded")]
+    lines_removed: Annotated[int, Field(alias="linesRemoved")]
+    local_tool_time_ms: Annotated[int | None, Field(alias="localToolTimeMs")] = None
+    model: str
+    model_time_ms: Annotated[int | None, Field(alias="modelTimeMs")] = None
+    output_tokens: Annotated[int, Field(alias="outputTokens")]
+    overhead_time_ms: Annotated[int | None, Field(alias="overheadTimeMs")] = None
+    plan_remaining_percent: Annotated[float | None, Field(alias="planRemainingPercent")] = None
+    reasoning_output_tokens: Annotated[int, Field(alias="reasoningOutputTokens")]
+    total_tokens: Annotated[int, Field(alias="totalTokens")]
+    turn_id: Annotated[str, Field(alias="turnId")]
+    wall_time_ms: Annotated[int | None, Field(alias="wallTimeMs")] = None
+    weekly_limit_used_percent: Annotated[float | None, Field(alias="weeklyLimitUsedPercent")] = None
+
+
 class TerminalInteractionNotification(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
@@ -5454,6 +5484,15 @@ class ContextCompactionThreadItem(BaseModel):
     )
     id: str
     type: Annotated[Literal["contextCompaction"], Field(title="ContextCompactionThreadItemType")]
+
+
+class TaskUsageSummaryThreadItem(BaseModel):
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    id: str
+    summary: TaskUsageSummaryEvent
+    type: Annotated[Literal["taskUsageSummary"], Field(title="TaskUsageSummaryThreadItemType")]
 
 
 class ItemThreadItemsListAnchor(BaseModel):
@@ -11341,6 +11380,7 @@ class ThreadItem(
         | EnteredReviewModeThreadItem
         | ExitedReviewModeThreadItem
         | ContextCompactionThreadItem
+        | TaskUsageSummaryThreadItem
     ]
 ):
     model_config = ConfigDict(
@@ -11366,6 +11406,7 @@ class ThreadItem(
         | EnteredReviewModeThreadItem
         | ExitedReviewModeThreadItem
         | ContextCompactionThreadItem
+        | TaskUsageSummaryThreadItem
     )
 
 

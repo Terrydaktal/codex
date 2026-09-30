@@ -256,7 +256,10 @@ async fn turn_tip_placements_and_completion_barrier() -> Result<()> {
         );
         let shown = screen.contains("└ Tip:");
         if shown && !working {
-            assert!(screen.contains("• Done."), "{screen}");
+            assert!(
+                screen.contains("• Done.") || screen.contains("• time wall"),
+                "{screen}"
+            );
         }
         assert_eq!(app.turn_tips.current.as_ref().unwrap().shown, shown);
         assert_eq!(
@@ -280,17 +283,17 @@ async fn turn_tip_placements_and_completion_barrier() -> Result<()> {
             app.render_owned_transcript(&mut tui, size)?;
             assert_eq!(app.turn_tips.completions_shown, usize::from(!working));
         }
-        if !working && shown {
+        if !working
+            && shown
+            && let Some(response_row) = screen.lines().position(|line| line.contains("• Done."))
+        {
             assert!(
                 !app.transcript_cells
                     .iter()
                     .flat_map(|cell| cell.raw_lines())
                     .any(|line| line.to_string().contains("Try /help"))
             );
-            let response_row = screen
-                .lines()
-                .position(|line| line.contains("• Done."))
-                .unwrap() as u16;
+            let response_row = response_row as u16;
             for (kind, column, row) in [
                 (
                     crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),

@@ -168,6 +168,53 @@ async fn replayed_failed_turns_preserve_overload_warnings_between_retries() {
 }
 
 #[tokio::test]
+async fn replayed_task_usage_summary_renders_after_the_turn() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.replay_thread_item(
+        AppServerThreadItem::TaskUsageSummary {
+            id: "task-usage-turn-1".to_string(),
+            summary: codex_protocol::protocol::TaskUsageSummaryEvent {
+                turn_id: "turn-1".to_string(),
+                model: "gpt-5.6-luna".to_string(),
+                total_tokens: 10,
+                input_tokens: 8,
+                cached_input_tokens: 4,
+                output_tokens: 2,
+                reasoning_output_tokens: 1,
+                weekly_limit_used_percent: Some(0.001),
+                calculated_weekly_remaining_percent: Some(99.999),
+                plan_remaining_percent: Some(99.0),
+                files_changed: 1,
+                files_created: 0,
+                files_deleted: 0,
+                files_modified: 1,
+                lines_added: 2,
+                lines_removed: 1,
+                wall_time_ms: Some(1_000),
+                model_time_ms: Some(700),
+                local_tool_time_ms: Some(200),
+                overhead_time_ms: Some(50),
+                first_output_ms: Some(100),
+                finished_at: None,
+            },
+        },
+        "turn-1".to_string(),
+        ReplayKind::ResumeInitialMessages,
+    );
+
+    let text_blob = drain_insert_history(&mut rx)
+        .into_iter()
+        .flatten()
+        .flat_map(|line| line.spans)
+        .map(|span| span.content)
+        .collect::<String>();
+    assert!(text_blob.contains("weekly limit remaining"));
+    assert!(text_blob.contains("files created 0"));
+    assert!(text_blob.contains("modified 1"));
+}
+
+#[tokio::test]
 async fn restored_conversation_ultra_remains_selected_after_switching_to_plan() {
     let (mut chat, _rx, _ops) = make_chatwidget_manual(Some("gpt-5.4")).await;
     chat.set_feature_enabled(Feature::CollaborationModes, /*enabled*/ true);

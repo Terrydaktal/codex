@@ -69,6 +69,11 @@ impl ChatWidget {
         let active_cell = Some(header);
 
         let current_cwd = Some(config.cwd.to_path_buf());
+        let task_usage_ledger = task_usage_ledger::TaskUsageLedger::load(
+            &config.codex_home,
+            config.cli_auth_credentials_store_mode,
+            config.auth_keyring_backend_kind(),
+        );
         let effective_service_tier = crate::service_tier_resolution::effective_service_tier(
             &config,
             &local_settings.notices,
@@ -147,6 +152,9 @@ impl ChatWidget {
             token_info: None,
             token_usage_pending: false,
             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
+            task_usage_ledger,
+            pending_task_usage_summaries: HashMap::new(),
+            next_task_usage_refresh_request_id: 0,
             refreshing_status_outputs: Vec::new(),
             next_status_refresh_request_id: 0,
             pending_rate_limit_reset_request_id: None,

@@ -80,6 +80,7 @@ impl ChatWidget {
         self.input_queue.user_turn_pending_start = false;
         self.reset_safety_buffering_for_turn_start();
         self.turn_lifecycle.start(Instant::now());
+        self.capture_task_usage_baseline();
         self.transcript.reset_turn_flags();
         self.adaptive_chunking.reset();
         if self.plan_stream_controller.take().is_some() {
@@ -117,12 +118,29 @@ impl ChatWidget {
     pub(super) fn on_task_complete(
         &mut self,
         last_agent_message: Option<String>,
+        duration_ms: Option<i64>,
         completion: Option<history_cell::FinalMessageSeparator>,
         from_replay: bool,
     ) {
         if self.status_state.reasoning_resume_turn_id.is_some() {
             self.on_agent_reasoning_final();
         }
+        if !from_replay {
+            self.collect_runtime_metrics_delta();
+        }
+        let (task_usage_summary, has_task_usage_summary) = if from_replay {
+            // Persisted task summaries are replayed as ordinary thread items. Do not synthesize
+            // one from the live-only baseline; legacy turns still need their completion label.
+            self.turn_lifecycle.task_usage_baseline = None;
+            (None, false)
+        } else if self.has_chatgpt_account {
+            let has_summary = self.defer_task_usage_summary(duration_ms, self.turn_runtime_metrics);
+            (None, has_summary)
+        } else {
+            let summary = self.take_task_usage_summary(duration_ms, self.turn_runtime_metrics);
+            let has_summary = summary.is_some();
+            (summary, has_summary)
+        };
         self.input_queue.submit_pending_steers_after_interrupt = false;
         let sanitized_last_agent_message = last_agent_message.as_deref().map(|message| {
             parse_assistant_markdown(message, self.config.cwd.as_path()).visible_markdown
@@ -148,18 +166,17 @@ impl ChatWidget {
         self.finish_dynamic_activity();
         self.flush_unified_exec_wait_streak();
         self.flush_completed_tool_activity();
-        if !from_replay {
-            self.collect_runtime_metrics_delta();
-        }
         let runtime_metrics = (!from_replay && !self.turn_runtime_metrics.is_empty())
             .then_some(self.turn_runtime_metrics);
-        if let Some(completion) = completion {
-            self.add_to_history(completion.with_runtime_metrics(runtime_metrics));
-        } else if let Some(runtime_metrics) = runtime_metrics {
-            self.add_to_history(history_cell::FinalMessageSeparator::new(
-                /*elapsed_seconds*/ None,
-                Some(runtime_metrics),
-            ));
+        if !has_task_usage_summary || self.config.features.enabled(Feature::RuntimeMetrics) {
+            if let Some(completion) = completion {
+                self.add_to_history(completion.with_runtime_metrics(runtime_metrics));
+            } else if let Some(runtime_metrics) = runtime_metrics {
+                self.add_to_history(history_cell::FinalMessageSeparator::new(
+                    /*elapsed_seconds*/ None,
+                    Some(runtime_metrics),
+                ));
+            }
         }
         self.turn_runtime_metrics = RuntimeMetricsSummary::default();
         if !from_replay {
@@ -199,6 +216,9 @@ impl ChatWidget {
         // still show the prompt once after thread switch replay.
         if !from_replay {
             self.transcript.saw_plan_item_this_turn = false;
+        }
+        if !from_replay && let Some(task_usage_summary) = task_usage_summary {
+            self.append_task_usage_summary(task_usage_summary);
         }
         if !from_replay {
             // Emit a notification only when the live agent is waiting for the user.

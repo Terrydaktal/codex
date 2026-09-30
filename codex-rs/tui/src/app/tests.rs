@@ -208,6 +208,7 @@ use codex_protocol::protocol::MultiAgentVersion;
 use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionSource as RolloutSessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use codex_protocol::protocol::TaskUsageSummaryEvent;
 use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::protocol::TurnStartedEvent;
 use codex_protocol::request_permissions::RequestPermissionProfile;
@@ -6022,6 +6023,7 @@ async fn make_test_app() -> Box<App> {
         agent_navigation: AgentNavigationState::default(),
         pending_server_profiles: HashMap::new(),
         agents_overview: Default::default(),
+        task_usage_aggregation: TaskUsageAggregationState::default(),
         side_threads: HashMap::new(),
         abandoned_side_threads: HashSet::new(),
         active_thread_id: None,
@@ -6137,6 +6139,7 @@ pub(super) async fn make_test_app_with_channels() -> (
             agent_navigation: AgentNavigationState::default(),
             pending_server_profiles: HashMap::new(),
             agents_overview: Default::default(),
+            task_usage_aggregation: TaskUsageAggregationState::default(),
             side_threads: HashMap::new(),
             abandoned_side_threads: HashSet::new(),
             active_thread_id: None,
@@ -8980,6 +8983,75 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
 
         assert_eq!(handled, true);
         assert!(!app.backtrack.primed);
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn record_task_usage_is_persisted_in_the_thread_rollout() {
+    Box::pin(async {
+        let mut app = make_test_app().await;
+        let mut app_server =
+            crate::start_embedded_app_server_for_picker(app.chat_widget.config_ref())
+                .await
+                .expect("embedded app server");
+        let started = app_server
+            .start_thread(app.chat_widget.config_ref())
+            .await
+            .expect("thread/start should succeed");
+        let thread_id = started.session.thread_id;
+        let rollout_path = started
+            .session
+            .rollout_path
+            .clone()
+            .expect("thread should have a rollout path");
+        app.enqueue_primary_thread_session(started.session, Vec::new())
+            .await
+            .expect("primary thread should be registered");
+
+        let summary = TaskUsageSummaryEvent {
+            turn_id: "turn-persisted-summary".to_string(),
+            model: "gpt-test".to_string(),
+            total_tokens: 10,
+            input_tokens: 8,
+            cached_input_tokens: 4,
+            output_tokens: 2,
+            reasoning_output_tokens: 1,
+            weekly_limit_used_percent: Some(0.001),
+            calculated_weekly_remaining_percent: Some(99.999),
+            plan_remaining_percent: Some(99.0),
+            files_changed: 1,
+            files_created: 0,
+            files_deleted: 0,
+            files_modified: 1,
+            lines_added: 2,
+            lines_removed: 1,
+            wall_time_ms: Some(1_000),
+            model_time_ms: Some(700),
+            local_tool_time_ms: Some(200),
+            overhead_time_ms: Some(50),
+            first_output_ms: Some(100),
+            finished_at: None,
+        };
+        let op = AppCommand::RecordTaskUsage {
+            summary: summary.clone(),
+        };
+
+        let handled = app
+            .try_submit_active_thread_op_via_app_server(&mut app_server, thread_id, &op)
+            .await
+            .expect("task usage submission should not fail");
+
+        assert!(handled);
+        let rollout = std::fs::read_to_string(rollout_path).expect("read thread rollout");
+        assert!(rollout.lines().any(|line| {
+            serde_json::from_str::<serde_json::Value>(line)
+                .ok()
+                .is_some_and(|value| {
+                    value["payload"]["type"] == "task_usage_summary"
+                        && value["payload"]["turnId"] == summary.turn_id
+                })
+        }));
     })
     .await;
 }

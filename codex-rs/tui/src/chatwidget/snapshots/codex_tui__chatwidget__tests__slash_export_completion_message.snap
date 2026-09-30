@@ -1,9 +1,17 @@
 ---
 source: tui/src/chatwidget/tests/slash_commands.rs
-assertion_line: 2193
 expression: "cells.iter().map(|cell|\nlines_to_single_string(cell).trim().to_string()).collect::<Vec<_>>().join(\"\\n\")"
 ---
-Worked for [duration] • [completion time]
+────────────────────────────────────────────────────────────────────────────────
+• weekly limit remaining:   100%
+• tokens: total:            0 (0%)
+          cached-input:     0 (0%)
+          non-cached-input: 0 (0%)
+          normal-output:    0 (0%)
+          reasoning-output: 0 (0%)
+• files created 0 · deleted 0 · modified 0 · lines +0 / -0
+• time wall 0ms · finished 2026-01-01 00:00:00
+────────────────────────────────────────────────────────────────────────────────
 • Saved conversation to conversation.md
 • Copied conversation to clipboard
 ■ Copy failed: clipboard unavailable

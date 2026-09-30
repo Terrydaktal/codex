@@ -199,6 +199,15 @@ impl TurnRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn thread_record_task_usage(
+        &self,
+        params: ThreadRecordTaskUsageParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.thread_record_task_usage_response_inner(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn thread_settings_update(
         &self,
         request_id: &ConnectionRequestId,
@@ -1000,6 +1009,25 @@ impl TurnRequestProcessor {
                 _ => internal_error(format!("failed to inject response items: {err}")),
             })?;
         Ok(ThreadInjectItemsResponse {})
+    }
+
+    async fn thread_record_task_usage_response_inner(
+        &self,
+        params: ThreadRecordTaskUsageParams,
+    ) -> Result<ThreadRecordTaskUsageResponse, JSONRPCErrorError> {
+        let (_, thread) = self.load_thread(&params.thread_id).await?;
+        if params.summary.turn_id.is_empty() {
+            return Err(invalid_request("summary.turnId must not be empty"));
+        }
+
+        thread
+            .record_task_usage_summary(params.summary)
+            .await
+            .map_err(|err| match err.details() {
+                CodexErrorDetails::InvalidRequest(message) => invalid_request(message.clone()),
+                _ => internal_error(format!("failed to record task usage summary: {err}")),
+            })?;
+        Ok(ThreadRecordTaskUsageResponse {})
     }
 
     async fn set_app_server_client_info(

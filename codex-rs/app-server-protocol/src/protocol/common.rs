@@ -866,6 +866,13 @@ client_request_definitions! {
         serialization: thread_id(params.thread_id),
         response: v2::ThreadInjectItemsResponse,
     },
+    #[experimental("thread/recordTaskUsage")]
+    /// Persist a per-turn usage summary in the thread's audit history.
+    ThreadRecordTaskUsage => "thread/recordTaskUsage" {
+        params: v2::ThreadRecordTaskUsageParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadRecordTaskUsageResponse,
+    },
     SkillsList => "skills/list" {
         params: v2::SkillsListParams,
         serialization: global_shared_read("config"),

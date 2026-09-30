@@ -936,10 +936,9 @@ async fn live_app_server_turn_completed_clears_working_status_after_answer_item(
         .iter()
         .map(|lines| lines_to_single_string(lines).trim().to_string())
         .collect::<Vec<_>>();
-    assert_eq!(
-        completion_cells,
-        vec!["Worked for [duration] • [completion time]"]
-    );
+    assert_eq!(completion_cells.len(), 1);
+    assert!(completion_cells[0].contains("weekly limit remaining:"));
+    assert!(completion_cells[0].contains("time wall"));
     assert!(!chat.bottom_pane.is_task_running());
     assert!(chat.bottom_pane.status_widget().is_none());
     assert_eq!(
@@ -1567,7 +1566,9 @@ async fn live_app_server_failed_turn_does_not_duplicate_error_history() {
         /*replay_kind*/ None,
     );
 
-    assert!(drain_insert_history(&mut rx).is_empty());
+    let completion_cells = drain_insert_history(&mut rx);
+    assert_eq!(completion_cells.len(), 1);
+    assert!(lines_to_single_string(&completion_cells[0]).contains("weekly limit remaining:"));
     assert!(!chat.bottom_pane.is_task_running());
 }
 

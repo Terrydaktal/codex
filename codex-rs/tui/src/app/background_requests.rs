@@ -111,7 +111,8 @@ impl App {
                 }
                 RateLimitRefreshOrigin::StartupPrefetch { .. }
                 | RateLimitRefreshOrigin::StatusCommand { .. }
-                | RateLimitRefreshOrigin::UsageMenu { .. } => {
+                | RateLimitRefreshOrigin::UsageMenu { .. }
+                | RateLimitRefreshOrigin::TaskCompletion { .. } => {
                     request.await.map_err(|err| err.to_string())
                 }
             };

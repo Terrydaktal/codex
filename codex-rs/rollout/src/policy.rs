@@ -111,6 +111,7 @@ pub fn should_persist_event_msg(ev: &EventMsg, history_mode: ThreadHistoryMode) 
                 )
         }
         EventMsg::TokenCount(_)
+        | EventMsg::TaskUsageSummary(_)
         | EventMsg::ThreadGoalUpdated(_)
         | EventMsg::ThreadRolledBack(_)
         | EventMsg::TurnAborted(_)

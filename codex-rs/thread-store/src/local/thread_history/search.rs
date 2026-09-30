@@ -347,7 +347,8 @@ fn searchable_text(item: &ThreadItem) -> Option<Cow<'_, str>> {
         | ThreadItem::ImageGeneration(_)
         | ThreadItem::EnteredReviewMode { .. }
         | ThreadItem::ExitedReviewMode { .. }
-        | ThreadItem::ContextCompaction { .. } => None,
+        | ThreadItem::ContextCompaction { .. }
+        | ThreadItem::TaskUsageSummary { .. } => None,
     }
 }
 

@@ -85,6 +85,11 @@ async fn unicode_math_termination_preserves_source_through_mode_and_resize() -> 
                 }
             }
             assert_eq!(saved, vec![source.trim_end_matches('\n').to_owned()]);
+            app.transcript_cells.retain(|cell| {
+                !cell
+                    .as_any()
+                    .is::<crate::chatwidget::task_usage::TaskUsageSummaryHistoryCell>()
+            });
             let mut expected = [None, None];
             for raw in [false, true, false] {
                 app.chat_widget.set_raw_output_mode(raw);

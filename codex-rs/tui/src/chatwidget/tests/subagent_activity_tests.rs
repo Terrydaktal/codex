@@ -62,7 +62,10 @@ fn drain_finalized_transcript(
             }
             AppEvent::InsertHistoryCell(cell)
                 if !cell.as_any().is::<history_cell::AgentMessageCell>()
-                    && !cell.as_any().is::<history_cell::FinalMessageSeparator>() =>
+                    && !cell.as_any().is::<history_cell::FinalMessageSeparator>()
+                    && !cell
+                        .as_any()
+                        .is::<crate::chatwidget::task_usage::TaskUsageSummaryHistoryCell>() =>
             {
                 let text = lines_to_single_string(&cell.display_lines(/*width*/ 80));
                 rendered.push(text.clone());

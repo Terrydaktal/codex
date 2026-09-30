@@ -1421,6 +1421,9 @@ pub enum EventMsg {
     /// Optional means unknown — UIs should not display when `None`.
     TokenCount(TokenCountEvent),
 
+    /// Per-turn usage and timing summary for the local audit transcript.
+    TaskUsageSummary(TaskUsageSummaryEvent),
+
     /// Agent text output message
     AgentMessage(AgentMessageEvent),
 
@@ -2365,6 +2368,36 @@ pub struct TokenCountEvent {
     /// Service tier used for the response, when one was explicitly selected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct TaskUsageSummaryEvent {
+    pub turn_id: String,
+    pub model: String,
+    pub total_tokens: i64,
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub output_tokens: i64,
+    pub reasoning_output_tokens: i64,
+    pub weekly_limit_used_percent: Option<f64>,
+    pub calculated_weekly_remaining_percent: Option<f64>,
+    pub plan_remaining_percent: Option<f64>,
+    pub files_changed: i64,
+    pub files_created: i64,
+    pub files_deleted: i64,
+    pub files_modified: i64,
+    pub lines_added: i64,
+    pub lines_removed: i64,
+    pub wall_time_ms: Option<i64>,
+    pub model_time_ms: Option<i64>,
+    pub local_tool_time_ms: Option<i64>,
+    pub overhead_time_ms: Option<i64>,
+    pub first_output_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = false, type = "bigint | null")]
+    pub finished_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]

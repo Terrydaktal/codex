@@ -930,6 +930,9 @@ goals = true
             if cell
                 .as_any()
                 .is::<crate::history_cell::FinalMessageSeparator>()
+                || cell
+                    .as_any()
+                    .is::<crate::chatwidget::task_usage::TaskUsageSummaryHistoryCell>()
             {
                 replayed_history
                     .push_str(&normalize_completion_timestamps(cell.as_ref(), rendered));

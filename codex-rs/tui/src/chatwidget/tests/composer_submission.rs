@@ -2756,8 +2756,8 @@ fn image_preparation_keeps_input_responsive_and_preserves_pending_input() {
                         assert_eq!(chat.bottom_pane.composer_text(), "describe\nx");
                     } else {
                         chat.on_task_complete(
-                            /*last_agent_message*/ None, /*completion*/ None,
-                            /*from_replay*/ false,
+                            /*last_agent_message*/ None, /*duration_ms*/ None,
+                            /*completion*/ None, /*from_replay*/ false,
                         );
                         assert_eq!(chat.input_queue.queued_user_messages.len(), 2);
                     }
