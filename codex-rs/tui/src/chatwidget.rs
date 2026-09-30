@@ -392,6 +392,9 @@ mod thread_title_status;
 mod thread_usage;
 pub(crate) use self::thread_usage::ThreadUsageOutcome;
 pub(crate) mod task_usage;
+pub(crate) use self::task_usage::TaskUsageContribution;
+mod task_usage_ledger;
+mod task_usage_scope;
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
@@ -559,6 +562,7 @@ pub(crate) struct ChatWidget {
     token_usage_pending: bool,
     // Status and polling use account usage reads; response streams may identify meters differently.
     rate_limit_snapshots_by_limit_id: BTreeMap<String, RateLimitSnapshotDisplay>,
+    task_usage_ledger: task_usage_ledger::TaskUsageLedger,
     pending_task_usage_summaries:
         HashMap<u64, Option<codex_protocol::protocol::TaskUsageSummaryEvent>>,
     next_task_usage_refresh_request_id: u64,
@@ -932,6 +936,18 @@ pub(crate) fn token_usage_info_from_app_server(token_usage: ThreadTokenUsage) ->
             reasoning_output_tokens: token_usage.last.reasoning_output_tokens,
         },
         model_context_window: token_usage.model_context_window,
+    }
+}
+
+pub(crate) fn token_usage_from_app_server(
+    token_usage: codex_app_server_protocol::TokenUsageBreakdown,
+) -> TokenUsage {
+    TokenUsage {
+        total_tokens: token_usage.total_tokens,
+        input_tokens: token_usage.input_tokens,
+        cached_input_tokens: token_usage.cached_input_tokens,
+        output_tokens: token_usage.output_tokens,
+        reasoning_output_tokens: token_usage.reasoning_output_tokens,
     }
 }
 

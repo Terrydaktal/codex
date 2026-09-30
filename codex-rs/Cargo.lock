@@ -4797,6 +4797,7 @@ dependencies = [
  "diffy",
  "dirs",
  "dunce",
+ "fd-lock",
  "futures",
  "http 1.4.0",
  "image",

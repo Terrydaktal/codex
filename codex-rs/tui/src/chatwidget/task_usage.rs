@@ -32,6 +32,36 @@ pub(super) struct TaskUsageBaseline {
     local_tool_duration_ms: u64,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TaskUsageContribution {
+    response_event_id: String,
+    usage: TokenUsage,
+    weekly_limit_used_percent: Option<f64>,
+}
+
+impl TaskUsageContribution {
+    #[cfg(test)]
+    pub(crate) fn new(thread_id: &str, turn_id: &str, model: &str, info: &TokenUsageInfo) -> Self {
+        Self {
+            response_event_id: response_usage_event_id(thread_id, turn_id, &info.total_token_usage),
+            usage: info.last_token_usage.clone(),
+            weekly_limit_used_percent: weekly_limit_used_percent(model, &info.last_token_usage),
+        }
+    }
+
+    pub(crate) fn from_response(response_id: &str, model: &str, usage: TokenUsage) -> Self {
+        Self {
+            response_event_id: response_id.to_string(),
+            weekly_limit_used_percent: weekly_limit_used_percent(model, &usage),
+            usage,
+        }
+    }
+
+    pub(crate) fn response_event_id(&self) -> &str {
+        &self.response_event_id
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct TaskDiffStats {
     pub(super) files_changed: usize,
@@ -113,6 +143,20 @@ impl ChatWidget {
                 &info.total_token_usage,
             ));
         }
+    }
+
+    pub(crate) fn record_task_response_contribution(
+        &mut self,
+        contribution: &TaskUsageContribution,
+    ) {
+        self.task_usage_ledger.record_response(
+            contribution.response_event_id(),
+            contribution.weekly_limit_used_percent,
+        );
+    }
+
+    pub(super) fn observe_weekly_plan_remaining(&mut self, current: Option<f64>) {
+        self.task_usage_ledger.observe_endpoint_remaining(current);
     }
 
     pub(super) fn take_task_usage_summary(
@@ -249,7 +293,12 @@ impl ChatWidget {
         &mut self,
         mut summary: TaskUsageSummaryEvent,
     ) -> TaskUsageSummaryEvent {
-        summary.plan_remaining_percent = self.weekly_plan_remaining_percent().or(Some(100.0));
+        let calculated_weekly_remaining_percent = self.task_usage_ledger.remaining_from_disk();
+        summary.calculated_weekly_remaining_percent = Some(calculated_weekly_remaining_percent);
+        summary.plan_remaining_percent = self
+            .task_usage_ledger
+            .endpoint_remaining_percent()
+            .or(Some(calculated_weekly_remaining_percent));
         summary
     }
 
@@ -300,6 +349,18 @@ fn weekly_limit_used_percent(model: &str, usage: &TokenUsage) -> Option<f64> {
             + rates.cached_input * cached_input
             + rates.output * output)
             / PLUS_WEEKLY_CREDIT_PERCENT_DENOMINATOR,
+    )
+}
+
+#[cfg(test)]
+fn response_usage_event_id(thread_id: &str, turn_id: &str, total_usage: &TokenUsage) -> String {
+    format!(
+        "response:{thread_id}:{turn_id}:{}:{}:{}:{}:{}",
+        total_usage.input_tokens,
+        total_usage.cached_input_tokens,
+        total_usage.output_tokens,
+        total_usage.reasoning_output_tokens,
+        total_usage.total_tokens,
     )
 }
 
