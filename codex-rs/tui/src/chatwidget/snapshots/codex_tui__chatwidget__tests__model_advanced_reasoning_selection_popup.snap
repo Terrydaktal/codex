@@ -2,12 +2,14 @@
 source: tui/src/chatwidget/tests/popups_and_settings.rs
 expression: popup
 ---
-  Advanced Reasoning
-  ⚠ Consumes usage limits faster
+  Select Reasoning Level for GPT-5.5
 
 
-  1. Max              For difficult problems when quality matters more than
-                      speed · higher usage
-› 2. Ultra (current)  For demanding work using multiple agents · highest usage
+  1. Low               Fast responses with lighter reasoning
+  2. Medium (default)  Balances speed and reasoning depth for everyday tasks
+  3. High              Greater reasoning depth for complex problems
+  4. Extra high        Extra high reasoning depth for complex problems
+› 5. Ultra (current)   Ultra reasoning
+  6. Max               Maximum available reasoning
 
   enter apply · s session · esc back

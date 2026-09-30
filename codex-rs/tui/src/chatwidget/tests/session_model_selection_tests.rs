@@ -30,10 +30,20 @@ async fn session_model_selection_accepts_final_choices_without_saving() {
         let expected_model = preset.model.clone();
         if picker == "default_only" {
             preset.supported_reasoning_efforts.clear();
+        } else if matches!(picker, "max" | "ultra") {
+            chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
+            preset.default_reasoning_effort = ReasoningEffortConfig::High;
+            preset.supported_reasoning_efforts.insert(
+                0,
+                ReasoningEffortPreset {
+                    effort: ReasoningEffortConfig::High,
+                    description: "High effort".into(),
+                },
+            );
         }
         match picker {
             "auto" | "single" | "default_only" => chat.open_model_popup_with_presets(vec![preset]),
-            "max" | "ultra" => chat.open_advanced_reasoning_popup(preset),
+            "max" | "ultra" => chat.open_reasoning_popup(preset),
             "reasoning" => {
                 chat.set_reasoning_effort(Some(effort.clone()));
                 preset
@@ -47,6 +57,9 @@ async fn session_model_selection_accepts_final_choices_without_saving() {
             _ => unreachable!(),
         }
         while rx.try_recv().is_ok() {}
+        if matches!(picker, "max" | "ultra") {
+            chat.handle_key_event(KeyEvent::from(KeyCode::Down));
+        }
         chat.handle_key_event(KeyEvent::from(KeyCode::Char('s')));
         let selected = rx.try_recv().expect("session-only selection");
         assert_matches!(selected, AppEvent::SelectSessionModel { model, effort: selected_effort }
@@ -91,7 +104,16 @@ async fn session_model_selection_notifies_the_original_task_after_each_final_ast
                     });
                 chat.open_reasoning_popup(preset);
             }
-            "advanced" => chat.open_advanced_reasoning_popup(preset),
+            "advanced" => {
+                preset.supported_reasoning_efforts.insert(
+                    0,
+                    ReasoningEffortPreset {
+                        effort: ReasoningEffortConfig::High,
+                        description: "High effort".into(),
+                    },
+                );
+                chat.open_reasoning_popup(preset);
+            }
             _ => unreachable!(),
         }
         while events.try_recv().is_ok() {}

@@ -413,7 +413,7 @@ async fn advanced_reasoning_selection_in_plan_mode_uses_expected_scope() {
             effort: effort.clone(),
             description: "Advanced reasoning".to_string(),
         }];
-        chat.open_advanced_reasoning_popup(preset);
+        chat.open_reasoning_popup(preset);
         chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
 
         let events = std::iter::from_fn(|| rx.try_recv().ok()).collect::<Vec<_>>();
