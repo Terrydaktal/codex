@@ -246,12 +246,15 @@ impl ChatWidget {
         replay_kind: ReplayKind,
     ) {
         match item {
-            // Snapshots contain the completed item, without the live start that renders its diff.
+            // Thread snapshots contain the completed item without the live start that renders
+            // its diff. Cold resume intentionally keeps the earlier behavior and skips
+            // historical patch previews: eagerly highlighting every old diff made large chats
+            // spend most of startup in syntect before the initial frame could be shown.
             ThreadItem::FileChange {
                 changes,
                 status: codex_app_server_protocol::PatchApplyStatus::Completed,
                 ..
-            } => {
+            } if replay_kind == ReplayKind::ThreadSnapshot => {
                 if !changes.is_empty() {
                     self.on_patch_apply_begin(file_update_changes_to_display(changes));
                 }

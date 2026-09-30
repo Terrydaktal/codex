@@ -80,6 +80,45 @@ async fn resumed_initial_messages_render_history() {
 }
 
 #[tokio::test]
+async fn cold_resume_skips_historical_patch_previews_but_thread_snapshots_restore_them() {
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    let completed_patch = || AppServerThreadItem::FileChange {
+        id: "patch-1".to_string(),
+        changes: vec![FileUpdateChange {
+            path: "src/main.rs".to_string(),
+            kind: PatchChangeKind::Add,
+            diff: "fn main() {}\n".to_string(),
+        }],
+        status: AppServerPatchApplyStatus::Completed,
+    };
+
+    chat.replay_thread_item(
+        completed_patch(),
+        "turn-1".to_string(),
+        ReplayKind::ResumeInitialMessages,
+    );
+    let cold_resume = drain_insert_history_transcript(&mut rx);
+
+    chat.replay_thread_item(
+        completed_patch(),
+        "turn-1".to_string(),
+        ReplayKind::ThreadSnapshot,
+    );
+    let thread_snapshot = drain_insert_history_transcript(&mut rx)
+        .into_iter()
+        .map(|lines| lines_to_single_string(&lines))
+        .collect::<String>();
+
+    insta::assert_snapshot!(
+        "cold_resume_skips_historical_patch_previews_but_thread_snapshots_restore_them",
+        format!(
+            "cold resume cells: {}\nthread snapshot:\n{thread_snapshot}",
+            cold_resume.len()
+        )
+    );
+}
+
+#[tokio::test]
 async fn replayed_failed_turns_preserve_overload_warnings_between_retries() {
     let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
     let prompt = "The workspace also looks super confusing with its separator.";

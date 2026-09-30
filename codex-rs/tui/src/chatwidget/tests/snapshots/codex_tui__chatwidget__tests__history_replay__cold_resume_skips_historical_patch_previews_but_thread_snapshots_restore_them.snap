@@ -1,0 +1,8 @@
+---
+source: tui/src/chatwidget/tests/history_replay.rs
+expression: "format!(\"cold resume cells: {}\\nthread snapshot:\\n{thread_snapshot}\",\ncold_resume.len())"
+---
+cold resume cells: 0
+thread snapshot:
+• Added src/main.rs (+1 -0)
+    1 +fn main() {}

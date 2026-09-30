@@ -1182,7 +1182,7 @@ async fn live_app_server_file_change_item_started_preserves_changes() {
             status: AppServerPatchApplyStatus::Completed,
         },
         "turn-1".to_string(),
-        ReplayKind::ResumeInitialMessages,
+        ReplayKind::ThreadSnapshot,
     );
     let replayed = drain_insert_history(&mut rx);
     assert_eq!(replayed.len(), 1);
