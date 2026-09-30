@@ -3434,6 +3434,7 @@ async fn token_count_includes_rate_limits_snapshot() {
     pretty_assertions::assert_eq!(
         final_json,
         json!({
+            "model": "gpt-5.5",
             "info": {
                 "total_token_usage": {
                     "input_tokens": 123,
@@ -3579,6 +3580,7 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     pretty_assertions::assert_eq!(
         event_json,
         json!({
+            "model": "gpt-5.5",
             "info": null,
             "rate_limits": expected_limits
         })

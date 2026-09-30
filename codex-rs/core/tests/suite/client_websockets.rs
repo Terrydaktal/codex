@@ -1813,6 +1813,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
     pretty_assertions::assert_eq!(
         event_json,
         json!({
+            "model": "gpt-5.5",
             "info": null,
             "rate_limits": {
                 "limit_id": "codex",

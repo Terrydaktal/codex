@@ -2933,6 +2933,7 @@ async fn try_run_sampling_request(
                 .await;
                 sess.record_observed_response_completed(
                     &turn_context,
+                    &step_context.settings,
                     &response_id,
                     token_usage.as_ref(),
                     usage_metadata.as_ref(),

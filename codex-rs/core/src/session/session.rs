@@ -59,6 +59,7 @@ type McpToolApprovalMetadataMap =
 pub(crate) struct Session {
     pub(crate) thread_id: ThreadId,
     pub(crate) installation_id: String,
+    pub(crate) account_id: Option<String>,
     pub(super) tx_event: Sender<Event>,
     pub(super) agent_status: watch::Sender<AgentStatus>,
     pub(super) state: Mutex<SessionState>,
@@ -1291,7 +1292,7 @@ impl Session {
             let network_proxy_audit_metadata = NetworkProxyAuditMetadata {
                 conversation_id: Some(thread_id.to_string()),
                 app_version: Some(env!("CARGO_PKG_VERSION").to_string()),
-                user_account_id: account_id,
+                user_account_id: account_id.clone(),
                 auth_mode: auth_mode.map(|mode| mode.to_string()),
                 originator: Some(originator),
                 user_email: account_email,
@@ -1766,6 +1767,7 @@ impl Session {
             let sess = Arc::new(Session {
                 thread_id,
                 installation_id,
+                account_id,
                 tx_event: tx_event.clone(),
                 agent_status,
                 state: Mutex::new(state),

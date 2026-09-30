@@ -306,6 +306,7 @@ use crate::state::AutoCompactWindowIds;
 use crate::state::AutoCompactWindowSnapshot;
 use crate::state::PendingRequestPermissions;
 use crate::state::ReasoningEffortPin;
+use crate::state::RecordTokenUsageParams;
 use crate::state::SessionServices;
 use crate::state::SessionState;
 #[cfg(test)]
@@ -4764,6 +4765,7 @@ impl Session {
     pub(crate) async fn record_observed_response_completed(
         &self,
         turn_context: &TurnContext,
+        settings: &ResolvedStepSettings,
         response_id: &str,
         usage: Option<&TokenUsage>,
         usage_metadata: Option<&ResponseUsageMetadata>,
@@ -4780,17 +4782,24 @@ impl Session {
         let Some(usage) = usage else {
             return;
         };
-        let record = self.state.lock().await.record_token_usage(
-            self.thread_id,
-            &turn_context.sub_id,
-            self.session_id(),
-            turn_context
-                .turn_metadata_state
-                .root_turn_id()
-                .unwrap_or_else(|| turn_context.sub_id.clone()),
-            response_id.to_string(),
-            usage,
-        );
+        let record = self
+            .state
+            .lock()
+            .await
+            .record_token_usage(RecordTokenUsageParams {
+                thread_id: self.thread_id,
+                turn_id: &turn_context.sub_id,
+                session_id: self.session_id(),
+                root_turn_id: turn_context
+                    .turn_metadata_state
+                    .root_turn_id()
+                    .unwrap_or_else(|| turn_context.sub_id.clone()),
+                response_id,
+                account_id: self.account_id.as_deref(),
+                model: &settings.model_info.slug,
+                service_tier: settings.service_tier.as_deref(),
+                usage,
+            });
         self.persist_rollout_items(&[RolloutItem::TokenUsageRecord(record)])
             .await;
     }
@@ -4922,7 +4931,13 @@ impl Session {
             let state = self.state.lock().await;
             state.token_info_and_rate_limits()
         };
-        let event = EventMsg::TokenCount(TokenCountEvent { info, rate_limits });
+        let event = EventMsg::TokenCount(TokenCountEvent {
+            info,
+            rate_limits,
+            account_id: self.account_id.clone(),
+            model: Some(turn_context.initial_settings.model_info.slug.clone()),
+            service_tier: turn_context.initial_settings.service_tier.clone(),
+        });
         self.send_event(turn_context, event).await;
     }
 

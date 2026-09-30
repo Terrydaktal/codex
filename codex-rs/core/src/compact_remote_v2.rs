@@ -301,8 +301,14 @@ async fn run_remote_compact_task_inner_impl(
         token_usage,
         owned_client_session: _owned_client_session,
     } = attempt;
-    if let Some(token_usage) = token_usage {
-        sess.record_rollout_budget_usage(&token_usage).await?;
+    if let Some(token_usage) = token_usage.as_ref() {
+        sess.record_token_usage_info(
+            compaction_turn_context,
+            &compaction_turn_context.initial_settings,
+            Some(token_usage),
+        )
+        .await?;
+        sess.send_token_count_event(compaction_turn_context).await;
         analytics_details.active_context_tokens_before = Some(token_usage.input_tokens);
         analytics_details.compaction_summary_tokens = Some(token_usage.output_tokens);
         analytics_details.cached_input_tokens = Some(token_usage.cached_input_tokens);
@@ -466,6 +472,7 @@ async fn collect_compaction_output(
             } => {
                 sess.record_observed_response_completed(
                     turn_context,
+                    &turn_context.initial_settings,
                     &response_id,
                     token_usage.as_ref(),
                     usage_metadata.as_ref(),

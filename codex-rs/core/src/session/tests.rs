@@ -3179,24 +3179,36 @@ async fn record_initial_history_seeds_token_info_from_rollout() {
         TokenCountEvent {
             info: Some(info1),
             rate_limits: None,
+            account_id: None,
+            model: None,
+            service_tier: None,
         },
     )));
     rollout_items.push(RolloutItem::EventMsg(EventMsg::TokenCount(
         TokenCountEvent {
             info: None,
             rate_limits: None,
+            account_id: None,
+            model: None,
+            service_tier: None,
         },
     )));
     rollout_items.push(RolloutItem::EventMsg(EventMsg::TokenCount(
         TokenCountEvent {
             info: Some(info2.clone()),
             rate_limits: None,
+            account_id: None,
+            model: None,
+            service_tier: None,
         },
     )));
     rollout_items.push(RolloutItem::EventMsg(EventMsg::TokenCount(
         TokenCountEvent {
             info: None,
             rate_limits: None,
+            account_id: None,
+            model: None,
+            service_tier: None,
         },
     )));
 
@@ -3221,6 +3233,9 @@ fn latest_token_usage_record_stops_at_compaction_checkpoint() {
         session_id: SessionId::from(thread_id),
         root_turn_id: "turn-1".to_string(),
         response_id: "response-1".to_string(),
+        account_id: None,
+        model: None,
+        service_tier: None,
         usage: TokenUsage::default(),
         turn_token_usage: TokenUsage::default(),
         thread_token_usage: TokenUsage::default(),
@@ -3815,6 +3830,9 @@ async fn start_new_context_window_persists_checkpoint_state() {
         session_id: SessionId::from(thread_id),
         root_turn_id: "turn-1".to_string(),
         response_id: "response-1".to_string(),
+        account_id: None,
+        model: None,
+        service_tier: None,
         usage: TokenUsage::default(),
         turn_token_usage: TokenUsage::default(),
         thread_token_usage: TokenUsage::default(),
@@ -6710,6 +6728,7 @@ pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
     let session = Session {
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
+        account_id: None,
         tx_event,
         agent_status: agent_status_tx,
         state: Mutex::new(state),
@@ -8986,6 +9005,7 @@ where
     let session = Arc::new(Session {
         thread_id,
         installation_id: "11111111-1111-4111-8111-111111111111".to_string(),
+        account_id: None,
         tx_event,
         agent_status: agent_status_tx,
         state: Mutex::new(state),

@@ -183,6 +183,9 @@ mod tests {
             RolloutItem::EventMsg(EventMsg::TokenCount(TokenCountEvent {
                 info: None,
                 rate_limits: None,
+                account_id: None,
+                model: None,
+                service_tier: None,
             })),
             RolloutItem::EventMsg(EventMsg::UserMessage(UserMessageEvent {
                 client_id: None,
