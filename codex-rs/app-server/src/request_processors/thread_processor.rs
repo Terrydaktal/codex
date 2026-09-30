@@ -4,6 +4,11 @@ mod daemon_continuation;
 #[path = "daemon_snapshot.rs"]
 mod daemon_snapshot;
 
+#[path = "resume_history_cache.rs"]
+mod resume_history_cache;
+
+use self::resume_history_cache::PreparedResumeHistory;
+use self::resume_history_cache::RolloutFingerprint;
 use super::persisted_resume_settings::PersistedResumeSettings;
 use super::persisted_resume_settings::latest_persisted_resume_settings;
 use super::thread_enrichment::enrich_loaded_threads;
@@ -98,6 +103,7 @@ struct ResumeConfigState {
 struct PreparedResumeConfig {
     state: ResumeConfigState,
     config: Config,
+    history: Option<PreparedResumeHistory>,
 }
 
 struct ThreadRevertRuntimeSnapshot {
@@ -2275,7 +2281,7 @@ impl ThreadRequestProcessor {
                 /*include_history*/ false,
             )
             .await?;
-        let (thread_history, resume_source_thread) = self
+        let (thread_history, resume_source_thread, _) = self
             .load_resume_initial_history_from_stored_thread(stored_thread)
             .await?;
         let response_history = thread_history.clone();
@@ -3724,31 +3730,65 @@ impl ThreadRequestProcessor {
         } = params.clone();
         let include_turns = !exclude_turns;
 
-        let resume_result = if let Some(history) = history {
-            self.resume_thread_from_history(history.as_slice())
-                .await
-                .map(|thread_history| (thread_history, None))
-        } else if let Some(stored_thread) = stored_thread_from_running_probe {
-            self.load_resume_initial_history_from_stored_thread(*stored_thread)
-                .await
-                .map(|(thread_history, stored_thread)| (thread_history, Some(stored_thread)))
-        } else {
-            match self
+        let cached_history = prepared_config
+            .as_mut()
+            .and_then(|prepared| prepared.history.take());
+        let reusable_history = if let Some(cached) = cached_history {
+            // The permit still protects the running-thread check above. Refresh store metadata
+            // after config loading so archiving, path changes and aliased resumes remain visible.
+            let current = self
                 .read_stored_thread_for_resume(
                     &thread_id,
                     path.as_ref(),
                     /*include_history*/ false,
                 )
-                .await
+                .await?;
+            if current.thread_id == cached.source.thread_id
+                && current.rollout_path == cached.source.rollout_path
+                && current.history_mode == cached.source.history_mode
+                && let Some(rollout_path) = current.rollout_path.as_ref()
+                && RolloutFingerprint::read(rollout_path).await == Some(cached.fingerprint)
             {
-                Ok(stored_thread) => self
-                    .load_resume_initial_history_from_stored_thread(stored_thread)
-                    .await
-                    .map(|(thread_history, stored_thread)| (thread_history, Some(stored_thread))),
-                Err(error) => Err(error),
+                Some((cached.history, current, cached.fingerprint))
+            } else {
+                None
             }
+        } else {
+            None
         };
-        let (thread_history, resume_source_thread) = resume_result?;
+
+        let resume_result =
+            if let Some((thread_history, stored_thread, fingerprint)) = reusable_history {
+                Ok((thread_history, Some(stored_thread), Some(fingerprint)))
+            } else if let Some(history) = history {
+                self.resume_thread_from_history(history.as_slice())
+                    .await
+                    .map(|thread_history| (thread_history, None, None))
+            } else if let Some(stored_thread) = stored_thread_from_running_probe {
+                self.load_resume_initial_history_from_stored_thread(*stored_thread)
+                    .await
+                    .map(|(thread_history, stored_thread, fingerprint)| {
+                        (thread_history, Some(stored_thread), fingerprint)
+                    })
+            } else {
+                match self
+                    .read_stored_thread_for_resume(
+                        &thread_id,
+                        path.as_ref(),
+                        /*include_history*/ false,
+                    )
+                    .await
+                {
+                    Ok(stored_thread) => self
+                        .load_resume_initial_history_from_stored_thread(stored_thread)
+                        .await
+                        .map(|(thread_history, stored_thread, fingerprint)| {
+                            (thread_history, Some(stored_thread), fingerprint)
+                        }),
+                    Err(error) => Err(error),
+                }
+            };
+        let (thread_history, resume_source_thread, history_fingerprint) = resume_result?;
         if let InitialHistory::Resumed(resumed) = &thread_history
             && self
                 .pending_thread_unloads
@@ -3955,9 +3995,18 @@ impl ThreadRequestProcessor {
                     .load_for_cwd(request_overrides, typesafe_overrides, history_cwd)
                     .await
                     .map_err(|err| config_load_error(&err))?;
+                let history = match (resume_source_thread, history_fingerprint) {
+                    (Some(source), Some(fingerprint)) => Some(PreparedResumeHistory {
+                        history: thread_history,
+                        source,
+                        fingerprint,
+                    }),
+                    _ => None,
+                };
                 *prepared_config = Some(PreparedResumeConfig {
                     state: config_state,
                     config,
+                    history,
                 });
                 // Recheck the thread and history after a possible archive, delete, or aliased resume.
                 return Ok(ControlFlow::Continue(()));
@@ -4575,7 +4624,7 @@ impl ThreadRequestProcessor {
     async fn load_resume_initial_history_from_stored_thread(
         &self,
         stored_thread: StoredThread,
-    ) -> Result<(InitialHistory, StoredThread), JSONRPCErrorError> {
+    ) -> Result<(InitialHistory, StoredThread, Option<RolloutFingerprint>), JSONRPCErrorError> {
         if matches!(stored_thread.history_mode, ThreadHistoryMode::Paginated) {
             let model_context = self
                 .thread_store
@@ -4590,11 +4639,15 @@ impl ThreadRequestProcessor {
                 history: Arc::new(model_context.items),
                 rollout_path: stored_thread.rollout_path.clone(),
             });
-            return Ok((history, stored_thread));
+            return Ok((history, stored_thread, None));
         }
 
         let thread_id = stored_thread.thread_id.to_string();
         let rollout_path = stored_thread.rollout_path.clone();
+        let before_load = match rollout_path.as_ref() {
+            Some(path) => RolloutFingerprint::read(path).await,
+            None => None,
+        };
         let mut stored_thread = self
             .read_stored_thread_for_resume(
                 &thread_id,
@@ -4605,7 +4658,17 @@ impl ThreadRequestProcessor {
         let history = self
             .stored_thread_to_initial_history(&mut stored_thread)
             .await?;
-        Ok((history, stored_thread))
+        let fingerprint = if stored_thread.rollout_path == rollout_path {
+            match rollout_path.as_ref() {
+                Some(path) => RolloutFingerprint::read(path)
+                    .await
+                    .filter(|after_load| Some(*after_load) == before_load),
+                None => None,
+            }
+        } else {
+            None
+        };
+        Ok((history, stored_thread, fingerprint))
     }
 
     async fn read_stored_thread_for_resume(

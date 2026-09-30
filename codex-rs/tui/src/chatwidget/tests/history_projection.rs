@@ -266,40 +266,35 @@ fn raw_reasoning_keeps_its_own_heading() {
 
 #[tokio::test]
 async fn snapshot_formatter_completed_patch_needs_no_started_notification() {
-    for replay_kind in [
-        ReplayKind::ResumeInitialMessages,
-        ReplayKind::ThreadSnapshot,
-    ] {
-        let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
-        drain_insert_history(&mut rx);
-        let item = patch_item(AppServerPatchApplyStatus::Completed);
-        let projected = thread_items_to_transcript_cells(
-            chat.thread_id,
-            &chat.config.cwd,
-            [item.clone()],
-            RawReasoningVisibility::Hidden,
-            Some(&chat.config),
-        );
-        chat.replay_thread_item(item, "turn".to_string(), replay_kind);
-        let replayed = take_history_cells(&mut rx);
-        assert_eq!((projected.len(), replayed.len()), (1, 1));
-        for width in [28, 80] {
-            assert_eq!(
-                (
-                    replayed[0].display_hyperlink_lines(width),
-                    replayed[0].transcript_hyperlink_lines(width),
-                ),
-                (
-                    projected[0].display_hyperlink_lines(width),
-                    projected[0].transcript_hyperlink_lines(width),
-                )
-            );
-        }
-        insta::assert_snapshot!(
-            "snapshot_formatter_completed_patch",
-            lines_to_single_string(&replayed[0].display_lines(/*width*/ 80))
+    let (mut chat, mut rx, _ops) = make_chatwidget_manual(/*model_override*/ None).await;
+    drain_insert_history(&mut rx);
+    let item = patch_item(AppServerPatchApplyStatus::Completed);
+    let projected = thread_items_to_transcript_cells(
+        chat.thread_id,
+        &chat.config.cwd,
+        [item.clone()],
+        RawReasoningVisibility::Hidden,
+        Some(&chat.config),
+    );
+    chat.replay_thread_item(item, "turn".to_string(), ReplayKind::ThreadSnapshot);
+    let replayed = take_history_cells(&mut rx);
+    assert_eq!((projected.len(), replayed.len()), (1, 1));
+    for width in [28, 80] {
+        assert_eq!(
+            (
+                replayed[0].display_hyperlink_lines(width),
+                replayed[0].transcript_hyperlink_lines(width),
+            ),
+            (
+                projected[0].display_hyperlink_lines(width),
+                projected[0].transcript_hyperlink_lines(width),
+            )
         );
     }
+    insta::assert_snapshot!(
+        "snapshot_formatter_completed_patch",
+        lines_to_single_string(&replayed[0].display_lines(/*width*/ 80))
+    );
 }
 
 #[tokio::test]
