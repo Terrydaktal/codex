@@ -30,6 +30,12 @@ pub struct WriterLockGuard {
     file: Option<File>,
 }
 
+#[derive(Clone, Copy)]
+enum WriterLockMode {
+    Shared,
+    Exclusive,
+}
+
 impl WriterLockCoordinator {
     /// Uses the same lock namespace as existing local thread-store writers.
     pub fn new(codex_home: &Path) -> Self {
@@ -41,6 +47,22 @@ impl WriterLockCoordinator {
 
     /// Acquires exclusive writer ownership, returning `WouldBlock` for an active writer.
     pub fn acquire(self: &Arc<Self>, thread_id: ThreadId) -> io::Result<WriterLockGuard> {
+        self.acquire_with_mode(thread_id, WriterLockMode::Exclusive)
+    }
+
+    /// Joins the set of live writers for a thread.
+    ///
+    /// Live writers share ownership while destructive lifecycle operations continue to use
+    /// [`Self::acquire`] and therefore remain exclusive.
+    pub fn acquire_live(self: &Arc<Self>, thread_id: ThreadId) -> io::Result<WriterLockGuard> {
+        self.acquire_with_mode(thread_id, WriterLockMode::Shared)
+    }
+
+    fn acquire_with_mode(
+        self: &Arc<Self>,
+        thread_id: ThreadId,
+        mode: WriterLockMode,
+    ) -> io::Result<WriterLockGuard> {
         let _coordination_lock = self.lock_coordination()?;
         if !self.cleanup_attempted.swap(true, Ordering::Relaxed)
             && let Err(err) = self.remove_stale_thread_locks()
@@ -62,7 +84,11 @@ impl WriterLockCoordinator {
                 ))
             })?;
 
-        match file.try_lock() {
+        let lock_result = match mode {
+            WriterLockMode::Shared => file.try_lock_shared(),
+            WriterLockMode::Exclusive => file.try_lock(),
+        };
+        match lock_result {
             Ok(()) => {}
             Err(std::fs::TryLockError::WouldBlock) => {
                 return Err(io::Error::new(
@@ -171,6 +197,30 @@ impl WriterLockCoordinator {
     }
 }
 
+impl WriterLockGuard {
+    /// Converts exclusive create ownership into shared live-writer ownership.
+    pub fn downgrade(&self) -> io::Result<()> {
+        let _coordination_lock = self.coordinator.lock_coordination()?;
+        let Some(file) = self.file.as_ref() else {
+            return Err(io::Error::other(
+                "thread writer lock was released before downgrade",
+            ));
+        };
+        file.unlock().map_err(|err| {
+            io::Error::other(format!(
+                "failed to release exclusive thread writer lock {} before downgrade: {err}",
+                self.path.display()
+            ))
+        })?;
+        file.lock_shared().map_err(|err| {
+            io::Error::other(format!(
+                "failed to downgrade thread writer lock {}: {err}",
+                self.path.display()
+            ))
+        })
+    }
+}
+
 impl Drop for WriterLockGuard {
     fn drop(&mut self) {
         let coordination_lock = match self.coordinator.lock_coordination() {
@@ -181,15 +231,39 @@ impl Drop for WriterLockGuard {
             }
         };
 
-        // Close the writer lock before deleting it so cleanup works on Windows too.
+        // Close this owner's lock, then remove the file only when no other shared live owner
+        // remains. Coordination prevents a new owner from opening the path between that check
+        // and removal.
         drop(self.file.take());
-        if let Err(err) = fs::remove_file(&self.path)
-            && err.kind() != io::ErrorKind::NotFound
-        {
-            warn!(
-                "failed to remove thread writer lock {}: {err}",
-                self.path.display()
-            );
+        let cleanup_file = OpenOptions::new().read(true).write(true).open(&self.path);
+        match cleanup_file {
+            Ok(file) => match file.try_lock() {
+                Ok(()) => {
+                    drop(file);
+                    if let Err(err) = fs::remove_file(&self.path)
+                        && err.kind() != io::ErrorKind::NotFound
+                    {
+                        warn!(
+                            "failed to remove thread writer lock {}: {err}",
+                            self.path.display()
+                        );
+                    }
+                }
+                Err(std::fs::TryLockError::WouldBlock) => {}
+                Err(std::fs::TryLockError::Error(err)) => {
+                    warn!(
+                        "failed to inspect thread writer lock {} during cleanup: {err}",
+                        self.path.display()
+                    );
+                }
+            },
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                warn!(
+                    "failed to open thread writer lock {} during cleanup: {err}",
+                    self.path.display()
+                );
+            }
         }
         drop(coordination_lock);
     }

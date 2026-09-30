@@ -975,6 +975,9 @@ impl RolloutRecorder {
                     cwd: cwd.clone(),
                     rollout_path: path,
                     ordinal_state,
+                    ordinal_refresh_mode: OrdinalRefreshMode::AfterInitialPrefix {
+                        end_ordinal_exclusive: subagent_history_start_ordinal,
+                    },
                     last_logged_error: None,
                 }
             }
@@ -989,6 +992,7 @@ impl RolloutRecorder {
                     cwd: cwd.clone(),
                     rollout_path: path,
                     ordinal_state,
+                    ordinal_refresh_mode: OrdinalRefreshMode::BeforeWrite,
                     last_logged_error: None,
                 }
             }
@@ -1779,7 +1783,18 @@ struct RolloutWriterState {
     cwd: PathBuf,
     rollout_path: PathBuf,
     ordinal_state: RolloutOrdinalState,
+    ordinal_refresh_mode: OrdinalRefreshMode,
     last_logged_error: Option<String>,
+}
+
+struct RolloutWriteLockGuard {
+    _file: File,
+}
+
+#[derive(Clone, Copy)]
+enum OrdinalRefreshMode {
+    AfterInitialPrefix { end_ordinal_exclusive: Option<u64> },
+    BeforeWrite,
 }
 
 impl RolloutWriterState {
@@ -1889,7 +1904,14 @@ impl RolloutWriterState {
     }
 
     async fn write_pending_once(&mut self) -> std::io::Result<()> {
+        let _write_lock = acquire_rollout_write_lock(self.rollout_path.as_path()).await?;
         self.ensure_writer_open().await?;
+        if matches!(self.ordinal_refresh_mode, OrdinalRefreshMode::BeforeWrite)
+            && !self.pending_items.is_empty()
+            && matches!(self.ordinal_state, RolloutOrdinalState::Paginated { .. })
+        {
+            self.refresh_paginated_ordinal_state().await?;
+        }
         self.write_session_meta_if_needed().await?;
 
         self.write_pending_items_once().await?;
@@ -1897,6 +1919,30 @@ impl RolloutWriterState {
         if let Some(writer) = self.writer.as_mut() {
             writer.file.flush().await?;
         }
+        if let (
+            RolloutOrdinalState::Paginated { next: Some(next) },
+            OrdinalRefreshMode::AfterInitialPrefix {
+                end_ordinal_exclusive,
+            },
+        ) = (self.ordinal_state, self.ordinal_refresh_mode)
+            && end_ordinal_exclusive.is_none_or(|end| next >= end)
+        {
+            // Preserve the inherited prefix's configured ordinal range. Once that prefix is
+            // durable, later appends can refresh from disk so concurrent live writers cannot use
+            // stale ordinals.
+            self.ordinal_refresh_mode = OrdinalRefreshMode::BeforeWrite;
+        }
+        Ok(())
+    }
+
+    async fn refresh_paginated_ordinal_state(&mut self) -> std::io::Result<()> {
+        let path = self.rollout_path.clone();
+        self.ordinal_state = tokio::task::spawn_blocking(move || {
+            let mut file = File::options().read(true).open(path.as_path())?;
+            ordinal_state_for_rollout(&mut file, path.as_path())
+        })
+        .await
+        .map_err(IoError::other)??;
         Ok(())
     }
 
@@ -1930,6 +1976,27 @@ impl RolloutWriterState {
 
         write_result
     }
+}
+
+async fn acquire_rollout_write_lock(path: &Path) -> std::io::Result<RolloutWriteLockGuard> {
+    let mut lock_path = compression::plain_rollout_path(path).into_os_string();
+    lock_path.push(".append.lock");
+    let lock_path = PathBuf::from(lock_path);
+    tokio::task::spawn_blocking(move || {
+        if let Some(parent) = lock_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(lock_path)?;
+        file.lock()?;
+        Ok(RolloutWriteLockGuard { _file: file })
+    })
+    .await
+    .map_err(IoError::other)?
 }
 
 async fn rollout_writer(
@@ -2006,6 +2073,7 @@ pub async fn append_rollout_item_to_path(
     rollout_path: &Path,
     item: &RolloutItem,
 ) -> std::io::Result<()> {
+    let _write_lock = acquire_rollout_write_lock(rollout_path).await?;
     let (_rollout_path, file, ordinal_state) =
         open_rollout_for_append(rollout_path, /*writer_lock*/ None).await?;
     let ordinal = ordinal_state.current()?;

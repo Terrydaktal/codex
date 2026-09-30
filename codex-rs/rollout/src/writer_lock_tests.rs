@@ -50,6 +50,35 @@ fn writer_locks_reject_competing_owners_and_release_their_files() {
 }
 
 #[test]
+fn live_writer_locks_share_ownership_and_block_exclusive_operations() {
+    let home = TempDir::new().expect("temp dir");
+    let primary = Arc::new(WriterLockCoordinator::new(home.path()));
+    let secondary = Arc::new(WriterLockCoordinator::new(home.path()));
+    let thread_id = ThreadId::default();
+
+    let primary_live = primary.acquire(thread_id).expect("acquire create lock");
+    primary_live.downgrade().expect("downgrade create lock");
+    let secondary_live = secondary
+        .acquire_live(thread_id)
+        .expect("acquire competing live lock");
+    let lock_path = home
+        .path()
+        .join(WRITER_LOCK_DIR)
+        .join(format!("{thread_id}.lock"));
+
+    let err = match primary.acquire(thread_id) {
+        Ok(_) => panic!("exclusive operation should fail while live writers exist"),
+        Err(err) => err,
+    };
+    assert_eq!(err.kind(), ErrorKind::WouldBlock);
+
+    drop(primary_live);
+    assert!(lock_path.exists());
+    drop(secondary_live);
+    assert!(!lock_path.exists());
+}
+
+#[test]
 fn first_acquisition_removes_stale_locks_without_removing_active_locks() {
     let home = TempDir::new().expect("temp dir");
     let primary = Arc::new(WriterLockCoordinator::new(home.path()));

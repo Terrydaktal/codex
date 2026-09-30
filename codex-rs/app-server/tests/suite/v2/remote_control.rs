@@ -500,7 +500,8 @@ async fn stdio_eof_exits_with_remote_control_connection() -> Result<()> {
 }
 
 #[tokio::test]
-async fn stdio_eof_releases_thread_writer_with_pending_remote_control_enable() -> Result<()> {
+async fn stdio_eof_preserves_shared_thread_writer_with_pending_remote_control_enable() -> Result<()>
+{
     let codex_home = TempDir::new()?;
     let mut backend = BlockingRemoteControlBackend::start(codex_home.path()).await?;
     let config_path = codex_home.path().join("config.toml");
@@ -553,23 +554,17 @@ async fn stdio_eof_releases_thread_writer_with_pending_remote_control_enable() -
         )])
         .build_initialized()
         .await?;
-    let resume_id = secondary
-        .send_thread_resume_request(ThreadResumeParams {
-            thread_id: thread_id.clone(),
-            exclude_turns: true,
-            ..Default::default()
+    let shared_resume: ThreadResumeResponse = secondary
+        .request(|request_id| ClientRequest::ThreadResume {
+            request_id,
+            params: ThreadResumeParams {
+                thread_id: thread_id.clone(),
+                exclude_turns: true,
+                ..Default::default()
+            },
         })
         .await?;
-    let error = timeout(
-        DEFAULT_TIMEOUT,
-        secondary.read_stream_until_error_message(RequestId::Integer(resume_id)),
-    )
-    .await??;
-    assert_eq!(error.error.code, -32600);
-    assert_eq!(
-        error.error.message,
-        format!("thread {thread_id} already has an active writer")
-    );
+    assert_eq!(shared_resume.thread.id, thread_id);
 
     owner.send_remote_control_enable_request().await?;
     assert_eq!(
@@ -579,7 +574,7 @@ async fn stdio_eof_releases_thread_writer_with_pending_remote_control_enable() -
     // Keep enrollment pending while EOF requests teardown of the owning process.
     let status = timeout(DEFAULT_TIMEOUT, owner.shutdown_gracefully())
         .await
-        .context("stdio EOF did not stop the thread writer while enrollment was pending")??;
+        .context("stdio EOF did not stop the owner while enrollment was pending")??;
     assert!(status.success());
 
     let state_db = StateRuntime::init(

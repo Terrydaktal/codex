@@ -2330,7 +2330,7 @@ async fn command_center_handles_resume_failure_and_success() -> Result<()> {
 }
 
 #[tokio::test]
-async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<()> {
+async fn command_center_shared_writer_opens_live_with_existing_owner() -> Result<()> {
     let mut app = Box::pin(make_test_app()).await;
     trust_fixture_folders(&mut app);
     std::fs::write(
@@ -2406,9 +2406,6 @@ async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<
     let mut view = app.agents_overview_view(vec![thread], Some(thread_id));
     view.handle_key_event(KeyCode::Esc.into());
     app.chat_widget.show_bottom_pane_view(Box::new(view));
-    let selection = app
-        .chat_widget
-        .selected_index_for_present_view(AGENTS_OVERVIEW_VIEW_ID);
     let mut tui = crate::tui::test_support::make_test_tui()?;
 
     app.chat_widget.handle_key_event(KeyCode::Right.into());
@@ -2418,12 +2415,16 @@ async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<
     );
     Box::pin(app.handle_event(&mut tui, &mut server, event)).await?;
     assert_eq!(app.chat_widget.thread_id(), Some(thread_id));
-    assert!(app.chat_widget.is_external_writer_view());
+    assert!(!app.chat_widget.is_external_writer_view());
     assert_eq!(
         app.thread_event_channels[&thread_id].attachment(),
-        ThreadEventAttachment::ExternalWriter
+        ThreadEventAttachment::Live
     );
-    assert_eq!(app.agents_overview.dispatched_requests[&thread_id].len(), 1);
+    assert!(
+        !app.agents_overview
+            .dispatched_requests
+            .contains_key(&thread_id)
+    );
     assert_eq!(
         app.chat_widget.composer_text_with_pending(),
         "Retained task draft"
@@ -2436,31 +2437,22 @@ async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<
         .turns;
     assert!(serde_json::to_string(&turns)?.contains("Saved task"));
     insta::with_settings!({snapshot_path => "../snapshots"}, {
-        insta::assert_snapshot!("agents_overview_attach_conflict", render_bottom_popup(&app.chat_widget, /*width*/ 96));
+        insta::assert_snapshot!("agents_overview_shared_writer", render_bottom_popup(&app.chat_widget, /*width*/ 96));
     });
 
-    for key in [KeyCode::Left, KeyCode::Esc] {
-        Box::pin(app.handle_tui_event(&mut tui, &mut server, TuiEvent::Key(key.into()))).await?;
-        assert_eq!(
-            app.chat_widget
-                .selected_index_for_present_view(AGENTS_OVERVIEW_VIEW_ID),
-            selection
-        );
-
-        // Opening the displayed task returns to the same frozen snapshot without retrying.
-        Box::pin(app.handle_event(
-            &mut tui,
-            &mut server,
-            AppEvent::SelectAgentsOverviewThread { thread_id },
-        ))
-        .await?;
-    }
+    // Opening the displayed task keeps the live shared attachment.
+    Box::pin(app.handle_event(
+        &mut tui,
+        &mut server,
+        AppEvent::SelectAgentsOverviewThread { thread_id },
+    ))
+    .await?;
     assert!(app.chat_widget.no_modal_or_popup_active());
-    assert!(app.chat_widget.is_external_writer_view());
-    app.chat_widget.handle_paste(" should be ignored".into());
+    assert!(!app.chat_widget.is_external_writer_view());
+    app.chat_widget.handle_paste(" remains editable".into());
     assert_eq!(
         app.chat_widget.composer_text_with_pending(),
-        "Retained task draft"
+        "Retained task draft remains editable"
     );
     assert_eq!(
         app.thread_event_channels[&thread_id]
@@ -2472,35 +2464,8 @@ async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<
         turns
     );
 
-    // An explicit retry remains read-only while the other server owns the task.
-    Box::pin(app.handle_key_event(&mut tui, &mut server, KeyCode::Char('r').into())).await;
-    assert!(app.chat_widget.is_external_writer_view());
-    assert_eq!(
-        app.chat_widget.composer_text_with_pending(),
-        "Retained task draft"
-    );
-    assert!(
-        server
-            .thread_loaded_list(codex_app_server_protocol::ThreadLoadedListParams {
-                cursor: None,
-                limit: None,
-            })
-            .await?
-            .data
-            .is_empty()
-    );
-
-    // Buffered requests stay untouched while viewing; remove the synthetic request before retry.
-    assert_eq!(
-        app.agents_overview
-            .dispatched_requests
-            .remove(&thread_id)
-            .unwrap()
-            .len(),
-        1
-    );
+    // The buffered request was replayed into the live attachment.
     owner.shutdown().await?;
-    Box::pin(app.handle_key_event(&mut tui, &mut server, KeyCode::Char('r').into())).await;
     assert_eq!(app.chat_widget.thread_id(), Some(thread_id));
     assert!(!app.chat_widget.is_external_writer_view());
     assert_eq!(
@@ -2509,7 +2474,7 @@ async fn command_center_attach_conflict_opens_read_only_and_retries() -> Result<
     );
     assert_eq!(
         app.chat_widget.composer_text_with_pending(),
-        "Retained task draft"
+        "Retained task draft remains editable"
     );
     assert!(app.chat_widget.no_modal_or_popup_active());
     server.shutdown().await?;
