@@ -807,6 +807,7 @@ impl App {
         self.pending_server_profiles.clear();
         self.agents_overview.activity.clear();
         self.agent_navigation.clear();
+        self.task_usage_aggregation.clear();
         self.side_threads.clear();
         self.active_thread_id = None;
         self.active_thread_rx = None;

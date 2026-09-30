@@ -259,6 +259,7 @@ mod side;
 mod startup;
 mod startup_prompts;
 mod startup_warnings;
+mod task_usage_aggregation;
 mod thread_event_buffer;
 mod thread_events;
 mod thread_goal_actions;
@@ -288,6 +289,7 @@ use self::side::SideParentStatus;
 use self::side::SideParentStatusChange;
 use self::side::SideThreadState;
 use self::startup_prompts::*;
+use self::task_usage_aggregation::TaskUsageAggregationState;
 use self::thread_events::*;
 
 const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue.";
@@ -619,6 +621,7 @@ pub(crate) struct App {
     thread_event_listener_tasks: HashMap<ThreadId, JoinHandle<()>>,
     agent_navigation: AgentNavigationState,
     agents_overview: agents_overview::AgentsOverviewState,
+    task_usage_aggregation: TaskUsageAggregationState,
     side_threads: HashMap<ThreadId, SideThreadState>,
     abandoned_side_threads: HashSet<ThreadId>,
     active_thread_id: Option<ThreadId>,

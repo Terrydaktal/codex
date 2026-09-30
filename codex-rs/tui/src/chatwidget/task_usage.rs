@@ -8,6 +8,7 @@ use codex_protocol::num_format::format_with_separators;
 use codex_protocol::protocol::TaskUsageSummaryEvent;
 use ratatui::style::Stylize;
 use ratatui::text::Line;
+use std::collections::HashSet;
 use std::time::Instant;
 
 use super::ChatWidget;
@@ -24,6 +25,9 @@ const TASK_USAGE_RAW_DIVIDER_WIDTH: usize = 80;
 #[derive(Debug)]
 pub(super) struct TaskUsageBaseline {
     token_usage: Option<TokenUsage>,
+    descendant_usage: TokenUsage,
+    descendant_weekly_limit_used_percent: Option<f64>,
+    descendant_response_event_ids: HashSet<String>,
     turn_id: String,
     model: String,
     diff_stats: TaskDiffStats,
@@ -101,6 +105,9 @@ impl ChatWidget {
                 .as_ref()
                 .map(|info| info.total_token_usage.clone())
                 .filter(|usage| !usage.is_zero()),
+            descendant_usage: TokenUsage::default(),
+            descendant_weekly_limit_used_percent: Some(0.0),
+            descendant_response_event_ids: HashSet::new(),
             turn_id: turn_id.clone(),
             model,
             diff_stats: TaskDiffStats::default(),
@@ -153,6 +160,33 @@ impl ChatWidget {
             contribution.response_event_id(),
             contribution.weekly_limit_used_percent,
         );
+    }
+
+    pub(crate) fn record_descendant_task_usage(
+        &mut self,
+        root_turn_id: &str,
+        contributions: Vec<TaskUsageContribution>,
+    ) {
+        let Some(baseline) = self.turn_lifecycle.task_usage_baseline.as_mut() else {
+            return;
+        };
+        if baseline.turn_id != root_turn_id {
+            return;
+        }
+
+        for contribution in contributions {
+            if !baseline
+                .descendant_response_event_ids
+                .insert(contribution.response_event_id)
+            {
+                continue;
+            }
+            token_usage_add_assign(&mut baseline.descendant_usage, &contribution.usage);
+            baseline.descendant_weekly_limit_used_percent = baseline
+                .descendant_weekly_limit_used_percent
+                .zip(contribution.weekly_limit_used_percent)
+                .map(|(total, contribution)| total + contribution);
+        }
     }
 
     pub(super) fn observe_weekly_plan_remaining(&mut self, current: Option<f64>) {
@@ -216,7 +250,7 @@ impl ChatWidget {
         let baseline = self.turn_lifecycle.task_usage_baseline.take()?;
         let diff_stats = baseline.diff_stats;
         let end_usage = self.total_token_usage();
-        let usage = baseline.token_usage.as_ref().map_or_else(
+        let mut usage = baseline.token_usage.as_ref().map_or_else(
             || {
                 self.token_info
                     .as_ref()
@@ -225,7 +259,11 @@ impl ChatWidget {
             },
             |start_usage| token_usage_delta(start_usage, &end_usage),
         );
-        let weekly_limit_used_percent = weekly_limit_used_percent(&baseline.model, &usage);
+        let root_weekly_limit_used_percent = weekly_limit_used_percent(&baseline.model, &usage);
+        token_usage_add_assign(&mut usage, &baseline.descendant_usage);
+        let weekly_limit_used_percent = root_weekly_limit_used_percent
+            .zip(baseline.descendant_weekly_limit_used_percent)
+            .map(|(root, descendants)| root + descendants);
         #[cfg(not(test))]
         let local_tool_time_ms = baseline.local_tool_duration_ms;
         #[cfg(test)]
@@ -428,6 +466,20 @@ fn token_usage_delta(start: &TokenUsage, end: &TokenUsage) -> TokenUsage {
             .max(0),
         total_tokens: (end.total_tokens - start.total_tokens).max(0),
     }
+}
+
+fn token_usage_add_assign(total: &mut TokenUsage, contribution: &TokenUsage) {
+    total.input_tokens = total.input_tokens.saturating_add(contribution.input_tokens);
+    total.cached_input_tokens = total
+        .cached_input_tokens
+        .saturating_add(contribution.cached_input_tokens);
+    total.output_tokens = total
+        .output_tokens
+        .saturating_add(contribution.output_tokens);
+    total.reasoning_output_tokens = total
+        .reasoning_output_tokens
+        .saturating_add(contribution.reasoning_output_tokens);
+    total.total_tokens = total.total_tokens.saturating_add(contribution.total_tokens);
 }
 
 fn task_usage_lines(

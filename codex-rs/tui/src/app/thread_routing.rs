@@ -1154,6 +1154,13 @@ impl App {
         if self.abandoned_side_threads.contains(&thread_id) {
             return Ok(());
         }
+        // Record agent lineage before a child can emit usage, even when the parent thread is not
+        // currently visible and its activity item will only be replayed later.
+        self.cache_collab_receiver_threads_for_notification(&notification);
+        if let ServerNotification::RawResponseCompleted(token_usage) = &notification {
+            self.record_task_usage_notification(thread_id, token_usage)
+                .await;
+        }
         if self.current_displayed_thread_id() == Some(thread_id)
             && let ServerNotification::TurnCompleted(notification) = &notification
         {
@@ -1373,6 +1380,8 @@ impl App {
         if let Some(activity) =
             sub_agent_activity_item(notification).and_then(sub_agent_activity_display)
         {
+            self.task_usage_aggregation
+                .mark_descendant(activity.thread_id);
             self.agent_navigation.record_sub_agent_activity(activity);
             self.sync_active_agent_label();
             return;
@@ -1394,6 +1403,8 @@ impl App {
                 );
                 continue;
             };
+
+            self.task_usage_aggregation.mark_descendant(thread_id);
 
             if self.agent_navigation.get(&thread_id).is_some() {
                 continue;
@@ -2028,6 +2039,7 @@ impl App {
         );
         match event {
             ThreadBufferedEvent::Notification(notification) => {
+                self.apply_descendant_task_usage_for_completion(notification.as_ref());
                 self.cache_collab_receiver_threads_for_notification(notification.as_ref());
                 let tip_ready = self.turn_tips.observe(&notification, Instant::now());
                 self.chat_widget
@@ -2070,6 +2082,7 @@ impl App {
         self.turn_tips.dismiss();
         match event {
             ThreadBufferedEvent::Notification(notification) => {
+                self.apply_descendant_task_usage_for_completion(notification.as_ref());
                 self.chat_widget
                     .handle_server_notification(*notification, Some(ReplayKind::ThreadSnapshot));
             }

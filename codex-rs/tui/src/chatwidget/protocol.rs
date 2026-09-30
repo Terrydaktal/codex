@@ -44,18 +44,6 @@ impl ChatWidget {
             self.restore_retry_status_header_if_present();
         }
         match notification {
-            ServerNotification::RawResponseCompleted(notification) => {
-                if replay_kind.is_none()
-                    && let Some(usage) = notification.usage
-                {
-                    let contribution = TaskUsageContribution::from_response(
-                        &notification.response_id,
-                        self.current_model(),
-                        token_usage_from_app_server(usage),
-                    );
-                    self.record_task_response_contribution(&contribution);
-                }
-            }
             ServerNotification::ThreadTokenUsageUpdated(notification) => {
                 let info = token_usage_info_from_app_server(notification.token_usage);
                 self.record_task_response_usage(
@@ -372,6 +360,7 @@ impl ChatWidget {
             | ServerNotification::ThreadUnarchived(_)
             | ServerNotification::ThreadAttachmentUpdated(_)
             | ServerNotification::RawResponseItemCompleted(_)
+            | ServerNotification::RawResponseCompleted(_)
             | ServerNotification::CommandExecOutputDelta(_)
             | ServerNotification::ProcessOutputDelta(_)
             | ServerNotification::ProcessExited(_)
