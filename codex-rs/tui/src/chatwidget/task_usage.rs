@@ -180,6 +180,17 @@ impl ChatWidget {
         }
     }
 
+    pub(super) fn record_task_file_changes(
+        &mut self,
+        changes: &[codex_app_server_protocol::FileUpdateChange],
+    ) {
+        if let Some(baseline) = self.turn_lifecycle.task_usage_baseline.as_mut() {
+            baseline
+                .workspace_tracker
+                .record_file_changes(changes, &self.config.cwd);
+        }
+    }
+
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
