@@ -125,7 +125,7 @@ impl ChatWidget {
                 format!("All models → {current_model}")
             };
             self.add_info_message(
-                format!("Ultra is available under /model → {model_path} → More reasoning…"),
+                format!("Max and Ultra are available under /model → {model_path}"),
                 /*hint*/ None,
             );
             return true;
