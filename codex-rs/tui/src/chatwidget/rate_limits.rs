@@ -329,15 +329,12 @@ impl ChatWidget {
                     snapshot
                         .secondary
                         .as_ref()
-                        .map(|window| f64::from(window.used_percent)),
+                        .map(|window| window.used_percent),
                     snapshot
                         .secondary
                         .as_ref()
                         .and_then(|window| window.window_duration_mins),
-                    snapshot
-                        .primary
-                        .as_ref()
-                        .map(|window| f64::from(window.used_percent)),
+                    snapshot.primary.as_ref().map(|window| window.used_percent),
                     snapshot
                         .primary
                         .as_ref()
@@ -351,12 +348,12 @@ impl ChatWidget {
                 && (snapshot
                     .secondary
                     .as_ref()
-                    .map(|w| f64::from(w.used_percent) >= RATE_LIMIT_SWITCH_PROMPT_THRESHOLD)
+                    .map(|w| w.used_percent >= RATE_LIMIT_SWITCH_PROMPT_THRESHOLD)
                     .unwrap_or(false)
                     || snapshot
                         .primary
                         .as_ref()
-                        .map(|w| f64::from(w.used_percent) >= RATE_LIMIT_SWITCH_PROMPT_THRESHOLD)
+                        .map(|w| w.used_percent >= RATE_LIMIT_SWITCH_PROMPT_THRESHOLD)
                         .unwrap_or(false));
 
             if high_usage

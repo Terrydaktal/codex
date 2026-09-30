@@ -44,7 +44,7 @@ fn notice_details_fit_without_truncating_the_warning() {
             "weekly_usage_notice_widths",
             UsageNoticeState {
                 secondary: Some(RateLimitWindow {
-                    used_percent: 98,
+                    used_percent: 98.0,
                     window_duration_mins: Some(10080),
                     resets_at: Some((now + chrono::Duration::days(/*days*/ 1)).timestamp()),
                 }),
@@ -159,12 +159,12 @@ fn most_constrained_window_wins_with_primary_tie_break() {
     let mut state = UsageNoticeState::default();
     let mut update = snapshot(/*used_percent*/ 90);
     update.secondary = Some(RateLimitWindow {
-        used_percent: 95,
+        used_percent: 95.0,
         window_duration_mins: Some(10080),
         resets_at: Some(2000),
     });
     for primary_used in [90, 95, 100] {
-        update.primary.as_mut().unwrap().used_percent = primary_used;
+        update.primary.as_mut().unwrap().used_percent = f64::from(primary_used);
         state.update(
             &update,
             RateLimitSnapshotSource::AccountUsage,
@@ -197,7 +197,7 @@ fn sparse_updates_preserve_metadata_until_confirmed_recovery() {
         /*plan_type*/ None,
     );
     let mut expected = initial.primary.unwrap();
-    expected.used_percent = 94;
+    expected.used_percent = 94.0;
     assert_eq!(state.current(), Some((expected.clone(), false)));
     sparse.primary = None;
     state.update(

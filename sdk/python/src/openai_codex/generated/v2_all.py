@@ -3644,7 +3644,7 @@ class RateLimitWindow(BaseModel):
         populate_by_name=True,
     )
     resets_at: Annotated[int | None, Field(alias="resetsAt")] = None
-    used_percent: Annotated[int, Field(alias="usedPercent")]
+    used_percent: Annotated[float, Field(alias="usedPercent")]
     window_duration_mins: Annotated[int | None, Field(alias="windowDurationMins")] = None
 
 

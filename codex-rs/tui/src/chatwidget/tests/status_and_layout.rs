@@ -618,7 +618,7 @@ async fn rate_limit_usage_warnings_early_threshold_is_scoped_and_deduplicated() 
 
         // Rolling updates retain the plan learned from the account usage response.
         usage.plan_type = None;
-        usage.primary.as_mut().unwrap().used_percent = 50;
+        usage.primary.as_mut().unwrap().used_percent = 50.0;
         chat.on_rolling_rate_limit_snapshot(usage.clone());
         let warnings = drain_insert_history_transcript(&mut rx);
         assert_eq!(!warnings.is_empty(), should_warn_early);
@@ -633,7 +633,7 @@ async fn rate_limit_usage_warnings_early_threshold_is_scoped_and_deduplicated() 
 
         chat.on_rolling_rate_limit_snapshot(usage.clone());
         assert!(drain_insert_history_transcript(&mut rx).is_empty());
-        for used_percent in [75, 90, 95] {
+        for used_percent in [75.0, 90.0, 95.0] {
             usage.primary.as_mut().unwrap().used_percent = used_percent;
             chat.on_rolling_rate_limit_snapshot(usage.clone());
             assert_eq!(drain_insert_history_transcript(&mut rx).len(), 1);
@@ -725,7 +725,7 @@ async fn status_line_uses_secondary_fallback_for_unsupported_window() {
         normal_model_slug: None,
         primary: None,
         secondary: Some(RateLimitWindow {
-            used_percent: 50,
+            used_percent: 50.0,
             window_duration_mins: Some(2 * 60),
             resets_at: None,
         }),
@@ -751,12 +751,12 @@ async fn status_line_legacy_limit_items_prefer_matching_windows() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 94,
+            used_percent: 94.0,
             window_duration_mins: Some(7 * 24 * 60),
             resets_at: None,
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 40,
+            used_percent: 40.0,
             window_duration_mins: Some(5 * 60),
             resets_at: None,
         }),
@@ -786,12 +786,12 @@ async fn status_line_shows_secondary_non_weekly_when_primary_is_weekly() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 94,
+            used_percent: 94.0,
             window_duration_mins: Some(7 * 24 * 60),
             resets_at: None,
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 35,
+            used_percent: 35.0,
             window_duration_mins: Some(30 * 24 * 60),
             resets_at: None,
         }),
@@ -821,7 +821,7 @@ async fn status_line_five_hour_item_omits_weekly_only_limit() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 9,
+            used_percent: 9.0,
             window_duration_mins: Some(7 * 24 * 60),
             resets_at: None,
         }),
@@ -852,7 +852,7 @@ async fn status_line_single_monthly_primary_omits_weekly_limit_item() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 35,
+            used_percent: 35.0,
             window_duration_mins: Some(30 * 24 * 60),
             resets_at: None,
         }),
@@ -884,7 +884,7 @@ async fn status_line_secondary_only_non_weekly_limit_omits_primary_limit_item() 
         normal_model_slug: None,
         primary: None,
         secondary: Some(RateLimitWindow {
-            used_percent: 35,
+            used_percent: 35.0,
             window_duration_mins: Some(30 * 24 * 60),
             resets_at: None,
         }),
@@ -914,7 +914,7 @@ async fn rate_limit_snapshot_keeps_prior_credits_when_missing_from_headers() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 10,
+            used_percent: 10.0,
             window_duration_mins: Some(60),
             resets_at: Some(123),
         }),
@@ -941,7 +941,7 @@ async fn rate_limit_snapshot_keeps_prior_credits_when_missing_from_headers() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 80,
+            used_percent: 80.0,
             window_duration_mins: Some(60),
             resets_at: Some(123),
         }),
@@ -1013,12 +1013,12 @@ async fn rate_limit_snapshot_updates_and_retains_plan_type() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 10,
+            used_percent: 10.0,
             window_duration_mins: Some(60),
             resets_at: None,
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 5,
+            used_percent: 5.0,
             window_duration_mins: Some(300),
             resets_at: None,
         }),
@@ -1035,12 +1035,12 @@ async fn rate_limit_snapshot_updates_and_retains_plan_type() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 25,
+            used_percent: 25.0,
             window_duration_mins: Some(30),
             resets_at: Some(123),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 15,
+            used_percent: 15.0,
             window_duration_mins: Some(300),
             resets_at: Some(234),
         }),
@@ -1057,12 +1057,12 @@ async fn rate_limit_snapshot_updates_and_retains_plan_type() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 30,
+            used_percent: 30.0,
             window_duration_mins: Some(60),
             resets_at: Some(456),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 18,
+            used_percent: 18.0,
             window_duration_mins: Some(300),
             resets_at: Some(567),
         }),
@@ -1084,7 +1084,7 @@ async fn rate_limit_snapshots_keep_separate_entries_per_limit_id() {
         limit_name: Some("codex".to_string()),
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 20,
+            used_percent: 20.0,
             window_duration_mins: Some(300),
             resets_at: Some(100),
         }),
@@ -1105,7 +1105,7 @@ async fn rate_limit_snapshots_keep_separate_entries_per_limit_id() {
         limit_name: Some("codex_other".to_string()),
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 90,
+            used_percent: 90.0,
             window_duration_mins: Some(60),
             resets_at: Some(200),
         }),
@@ -1161,7 +1161,7 @@ async fn rate_limit_switch_prompt_skips_non_codex_limit() {
         limit_name: Some("codex_other".to_string()),
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 95,
+            used_percent: 95.0,
             window_duration_mins: Some(60),
             resets_at: None,
         }),

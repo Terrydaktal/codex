@@ -112,6 +112,7 @@ use crate::facts::TurnCodexError;
 use crate::facts::TurnCodexErrorFact;
 use crate::facts::TurnProfile;
 use crate::facts::TurnProfileFact;
+use crate::facts::TurnRateLimitFact;
 use crate::facts::TurnResolvedConfigFact;
 use crate::facts::TurnStatus;
 use crate::facts::TurnSteerRejectionReason;
@@ -166,6 +167,7 @@ use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::items::ModelInvocationContext;
 use codex_protocol::items::is_safe_plugin_relative_path;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SkillScope;
 use codex_protocol::protocol::ThreadSource;
@@ -437,6 +439,8 @@ struct TurnState {
     resolved_config: Option<TurnResolvedConfigFact>,
     started_at: Option<u64>,
     token_usage: Option<TokenUsage>,
+    rate_limits_at_turn_start: Option<RateLimitSnapshot>,
+    rate_limits_at_turn_end: Option<RateLimitSnapshot>,
     profile: Option<TurnProfile>,
     completed: Option<CompletedTurnState>,
     explicit_client_interrupt_requested_at_ms: Option<u64>,
@@ -712,6 +716,9 @@ impl AnalyticsReducer {
                 }
                 CustomAnalyticsFact::TurnTokenUsage(input) => {
                     self.ingest_turn_token_usage(*input, out).await;
+                }
+                CustomAnalyticsFact::TurnRateLimit(input) => {
+                    self.ingest_turn_rate_limit(*input, out).await;
                 }
                 CustomAnalyticsFact::TurnProfile(input) => {
                     self.ingest_turn_profile(*input, out).await;
@@ -1309,6 +1316,24 @@ impl AnalyticsReducer {
         let TurnProfileFact { turn_id, profile } = input;
         let turn_state = self.turns.entry(turn_id.clone()).or_default();
         turn_state.profile = Some(profile);
+        self.maybe_emit_turn_event(&turn_id, out).await;
+    }
+
+    async fn ingest_turn_rate_limit(
+        &mut self,
+        input: TurnRateLimitFact,
+        out: &mut Vec<TrackEventRequest>,
+    ) {
+        let TurnRateLimitFact {
+            turn_id,
+            thread_id,
+            rate_limits_at_turn_start,
+            rate_limits_at_turn_end,
+        } = input;
+        let turn_state = self.turns.entry(turn_id.clone()).or_default();
+        turn_state.thread_id = Some(thread_id);
+        turn_state.rate_limits_at_turn_start = rate_limits_at_turn_start;
+        turn_state.rate_limits_at_turn_end = rate_limits_at_turn_end;
         self.maybe_emit_turn_event(&turn_id, out).await;
     }
 
@@ -3664,6 +3689,13 @@ fn codex_turn_event_params(
     } = profile;
     let token_usage = turn_state.token_usage.clone();
     let codex_error = turn_state.codex_error.as_ref();
+    let weekly_limit_used_percent_before =
+        weekly_limit_used_percent(turn_state.rate_limits_at_turn_start.as_ref());
+    let weekly_limit_used_percent_after =
+        weekly_limit_used_percent(turn_state.rate_limits_at_turn_end.as_ref());
+    let weekly_limit_used_percent_delta = weekly_limit_used_percent_before
+        .zip(weekly_limit_used_percent_after)
+        .map(|(before, after)| after - before);
     CodexTurnEventParams {
         thread_id,
         session_id: thread_metadata.session_id.clone(),
@@ -3736,6 +3768,9 @@ fn codex_turn_event_params(
         total_tokens: token_usage
             .as_ref()
             .map(|token_usage| token_usage.total_tokens),
+        weekly_limit_used_percent_before,
+        weekly_limit_used_percent_after,
+        weekly_limit_used_percent_delta,
         before_first_sampling_ms,
         sampling_ms,
         compaction_ms,
@@ -3748,6 +3783,17 @@ fn codex_turn_event_params(
         started_at,
         completed_at: Some(completed.completed_at),
     }
+}
+
+const WEEKLY_LIMIT_WINDOW_MINUTES: i64 = 7 * 24 * 60;
+
+fn weekly_limit_used_percent(snapshot: Option<&RateLimitSnapshot>) -> Option<f64> {
+    let snapshot = snapshot?;
+    [snapshot.primary.as_ref(), snapshot.secondary.as_ref()]
+        .into_iter()
+        .flatten()
+        .find(|window| window.window_minutes == Some(WEEKLY_LIMIT_WINDOW_MINUTES))
+        .map(|window| window.used_percent)
 }
 
 fn sandbox_policy_mode(permission_profile: &PermissionProfile, cwd: &Path) -> &'static str {

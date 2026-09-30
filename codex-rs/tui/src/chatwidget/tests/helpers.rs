@@ -149,7 +149,7 @@ pub(super) fn snapshot(percent: f64) -> RateLimitSnapshot {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: percent.round() as i32,
+            used_percent: percent,
             window_duration_mins: Some(60),
             resets_at: None,
         }),

@@ -3568,8 +3568,8 @@
           ]
         },
         "usedPercent": {
-          "format": "int32",
-          "type": "integer"
+          "format": "double",
+          "type": "number"
         },
         "windowDurationMins": {
           "format": "int64",

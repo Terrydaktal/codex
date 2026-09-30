@@ -297,12 +297,12 @@ async fn status_snapshot_includes_reasoning_details() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 72,
+            used_percent: 72.0,
             window_duration_mins: Some(300),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 600)),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 45,
+            used_percent: 45.0,
             window_duration_mins: Some(10080),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 1_200)),
         }),
@@ -1024,7 +1024,7 @@ async fn status_snapshot_includes_monthly_limit() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 12,
+            used_percent: 12.0,
             window_duration_mins: Some(43_200),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 86_400)),
         }),
@@ -1168,12 +1168,12 @@ async fn status_snapshot_uses_generic_limit_labels_for_unsupported_windows() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 35,
+            used_percent: 35.0,
             window_duration_mins: Some(2 * 60),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 86_400)),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 50,
+            used_percent: 50.0,
             window_duration_mins: Some(3 * 60),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 172_800)),
         }),
@@ -1559,7 +1559,7 @@ async fn status_snapshot_wraps_in_narrow_terminal() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 72,
+            used_percent: 72.0,
             window_duration_mins: Some(300),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 600)),
         }),
@@ -1778,12 +1778,12 @@ async fn status_snapshot_shows_refreshing_limits_notice() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 45,
+            used_percent: 45.0,
             window_duration_mins: Some(300),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 900)),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 30,
+            used_percent: 30.0,
             window_duration_mins: Some(10_080),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 2_700)),
         }),
@@ -1933,12 +1933,12 @@ async fn status_snapshot_includes_credits_and_limits() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 45,
+            used_percent: 45.0,
             window_duration_mins: Some(300),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 900)),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 30,
+            used_percent: 30.0,
             window_duration_mins: Some(10_080),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 2_700)),
         }),
@@ -2128,12 +2128,12 @@ async fn status_snapshot_shows_stale_limits_message() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 72,
+            used_percent: 72.0,
             window_duration_mins: Some(300),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 600)),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 40,
+            used_percent: 40.0,
             window_duration_mins: Some(10_080),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 1_800)),
         }),
@@ -2198,12 +2198,12 @@ async fn status_snapshot_cached_limits_hide_credits_without_flag() {
         limit_name: None,
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: 60,
+            used_percent: 60.0,
             window_duration_mins: Some(300),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 1_200)),
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: 35,
+            used_percent: 35.0,
             window_duration_mins: Some(10_080),
             resets_at: Some(reset_at_from(&captured_at, /*seconds*/ 2_400)),
         }),

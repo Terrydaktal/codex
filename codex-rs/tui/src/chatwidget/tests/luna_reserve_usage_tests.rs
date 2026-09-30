@@ -13,12 +13,12 @@ fn reserve_snapshot(primary_used: i32, weekly_used: i32) -> RateLimitSnapshot {
         limit_name: Some("gpt-reserve".into()),
         normal_model_slug: None,
         primary: Some(RateLimitWindow {
-            used_percent: primary_used,
+            used_percent: f64::from(primary_used),
             window_duration_mins: Some(300),
             resets_at: None,
         }),
         secondary: Some(RateLimitWindow {
-            used_percent: weekly_used,
+            used_percent: f64::from(weekly_used),
             window_duration_mins: Some(10080),
             resets_at: None,
         }),

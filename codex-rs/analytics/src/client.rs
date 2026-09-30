@@ -33,6 +33,7 @@ use crate::facts::SubAgentThreadStartedInput;
 use crate::facts::TrackEventsContext;
 use crate::facts::TurnCodexErrorFact;
 use crate::facts::TurnProfileFact;
+use crate::facts::TurnRateLimitFact;
 use crate::facts::TurnResolvedConfigFact;
 use crate::facts::TurnTokenUsageFact;
 use crate::guardian_v2::GuardianV2Event;
@@ -541,6 +542,12 @@ impl AnalyticsEventsClient {
 
     pub fn track_turn_token_usage(&self, fact: TurnTokenUsageFact) {
         self.record_fact(AnalyticsFact::Custom(CustomAnalyticsFact::TurnTokenUsage(
+            Box::new(fact),
+        )));
+    }
+
+    pub fn track_turn_rate_limit(&self, fact: TurnRateLimitFact) {
+        self.record_fact(AnalyticsFact::Custom(CustomAnalyticsFact::TurnRateLimit(
             Box::new(fact),
         )));
     }
