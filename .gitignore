@@ -15,6 +15,11 @@ build/
 out/
 storybook-static/
 
+# Local source/history backups are not part of the portable fork.
+/archives/
+# Generated from the canonical feature commits; never commit recursive exports.
+/local-customizations/patches/
+
 # ignore README for publishing
 codex-cli/README.md
 
@@ -68,6 +73,9 @@ apply_patch/
 
 # coverage
 coverage/
+
+# Pending Insta snapshot updates are test residue, not accepted fixtures.
+*.snap.new
 
 # personal files
 personal/

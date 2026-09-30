@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "base_commit": "8e68a98ef03cdde76d2e6800791ebdf1b3b95b24",
+    "version": "0.159.1"
+  },
+  "generated_paths": [
+    "codex-rs/Cargo.lock",
+    "codex-rs/app-server-protocol/schema",
+    "sdk/python/src/openai_codex/generated/v2_all.py"
+  ],
+  "ignored_untracked_globs": [
+    "*.snap.new",
+    "*.pending-snap"
+  ],
+  "portable_untracked_paths": [
+    "local-customizations/PORTING.md",
+    "local-customizations/manifest.json",
+    "scripts/port-local-customizations.py",
+    "scripts/bootstrap-weekly-task-usage.sh",
+    "codex-rs/app-server/src/request_processors_tests.rs",
+    "codex-rs/app-server/src/request_processors/resume_history_cache.rs",
+    "codex-rs/app-server/src/request_processors/resume_history_cache_tests.rs",
+    "codex-rs/tui/src/app/snapshots/codex_tui__app__owned_transcript__input_tests__command_output_ctrl_t.snap",
+    "codex-rs/tui/src/app/snapshots/codex_tui__app__owned_transcript__tests__fullscreen_composer_explicit_copy.snap",
+    "codex-rs/tui/src/transcript_view/manual_copy_tests.rs",
+    "codex-rs/tui/src/transcript_view/copy_delivery_tests.rs",
+    "codex-rs/tui/src/tui/snapshots/codex_tui__tui__event_stream__tests__terminal_owned_mouse_keyboard_cursor.snap",
+    "codex-rs/tui/src/transcript_view/snapshots/codex_tui__transcript_view__input__copy_delivery_tests__ctrl_c_retains_selection_until_confirmed_and_preserves_reading_position.snap",
+    "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__task_usage__tests__task_usage_lines_show_colored_task_summary.snap",
+    "codex-rs/tui/src/chatwidget/task_usage.rs",
+    "codex-rs/tui/src/chatwidget/task_usage_ledger.rs",
+    "codex-rs/tui/src/chatwidget/task_usage_ledger_tests.rs",
+    "codex-rs/tui/src/chatwidget/task_usage_scope.rs",
+    "codex-rs/tui/src/chatwidget/task_usage_tests.rs",
+    "codex-rs/tui/src/chatwidget/task_workspace.rs",
+    "codex-rs/tui/src/chatwidget/task_workspace_tests.rs",
+    "codex-rs/tui/src/app/task_usage_aggregation.rs",
+    "codex-rs/tui/src/app/task_usage_aggregation_tests.rs",
+    "codex-rs/tui/src/chatwidget/tests/snapshots/codex_tui__chatwidget__tests__history_replay__cold_resume_skips_historical_patch_previews_but_thread_snapshots_restore_them.snap",
+    "codex-rs/tui/src/snapshots/codex_tui__app__agents_overview__tests__agents_overview_shared_writer.snap",
+    "codex-rs/tui/src/chatwidget/tests/clipboard_image_tests.rs",
+    "codex-rs/tui/src/bottom_pane/chat_composer/inline_images.rs",
+    "codex-rs/tui/src/bottom_pane/textarea/image_label_tests.rs",
+    "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__clipboard_images_at_cursor.snap",
+    "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__clipboard_image_inline_draft.snap",
+    "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__tests__clipboard_image_selected_with_local_image.snap",
+    "codex-rs/tui/src/clipboard_paste_image_tests.rs",
+    "codex-rs/tui/src/bottom_pane/snapshots/codex_tui__bottom_pane__chat_composer__tests__per_window_default_status.snap",
+    "codex-rs/tui/src/running_build.rs",
+    "codex-rs/tui/src/running_build/elf.rs",
+    "codex-rs/tui/src/running_build/launcher.rs",
+    "codex-rs/tui/src/running_build/monitor.rs",
+    "codex-rs/tui/src/running_build/watch.rs",
+    "codex-rs/tui/src/running_build_tests.rs",
+    "codex-rs/tui/tests/suite/running_build.rs",
+    "codex-rs/cli/src/memory_allocator.rs",
+    "codex-rs/cli/src/memory_allocator_tests.rs",
+    "codex-rs/cli/tests/memory_allocator.rs",
+    "codex-rs/cli/tests/fixtures/memory_allocator_probe.c",
+    "scripts/test_port_local_customizations.py"
+  ],
+  "behavior_contracts": [
+    {
+      "id": "clipboard-images-inline-at-cursor",
+      "owner": "codex-tui",
+      "contract": "Clipboard PNG snapshots paste as atomic placeholders at the cursor without duplicate attachment rows or temporary files; deletion, mixed local images, queued-draft merging, external edits and draft restoration preserve the matching bytes and labels.",
+      "tests": [
+        "terminal_paste_prefers_a_clipboard_image_over_its_text_payload",
+        "clipboard_images_insert_at_cursor_and_delete_only_the_matching_bytes",
+        "clipboard_image_relabels_multiple_dropped_images_without_label_collisions",
+        "clipboard_image_external_edit_preserves_atomic_placeholders_and_removes_deleted_images",
+        "clipboard_image_merged_queued_drafts_keep_distinct_inline_labels",
+        "clipboard_image_survives_startup_draft_handoff",
+        "clipboard_image_does_not_become_a_selectable_remote_row",
+        "image_label_rename_preserves_cursor_before_and_at_its_start"
+      ]
+    },
+    {
+      "id": "local-backend-default",
+      "owner": "codex-tui",
+      "contract": "New, resumed, and forked local sessions use a per-window embedded backend, even when a daemon socket already exists.",
+      "tests": [
+        "per_window_launch_policy_applies_to_new_resume_and_fork",
+        "normal_launches_ignore_existing_daemon_and_its_package"
+      ]
+    },
+    {
+      "id": "local-backend-explicit-shared",
+      "owner": "codex-tui",
+      "contract": "Explicit agents and remote launches retain shared-server selection and reconnect support.",
+      "tests": [
+        "daemon_eligibility_preserves_launch_options_and_explains_exclusions",
+        "app_server_target_for_launch_prefers_explicit_remote_endpoint",
+        "automatic_reconnect_restores_draft_and_routes_new_notifications"
+      ]
+    },
+    {
+      "id": "local-backend-no-daemon",
+      "owner": "codex-tui",
+      "contract": "The existing --no-daemon opt-out still skips daemon discovery and startup without warning noise.",
+      "tests": [
+        "no_daemon_skips_startup_and_discovery"
+      ]
+    },
+    {
+      "id": "running-native-build-title",
+      "owner": "codex-tui",
+      "contract": "On Linux, background GNU build-ID checks of unresolved launch indirection mark only the Codex title label, preserve unknown/stale state, and clear on restoration without restarting or interfering with tmux.",
+      "tests": [
+        "build_identity_tracks_replacement_retargeting_restoration_and_unknown_candidates",
+        "directory_symlinks_and_bare_launcher_path_precedence_are_rechecked",
+        "static_wrappers_and_explicit_native_targets_are_read_without_execution",
+        "monitor_debounces_retargets_retains_unknown_and_clears_on_restoration",
+        "periodic_check_covers_missing_watch_directories",
+        "outdated_running_build_title_preserves_dynamic_text_and_disabled_titles",
+        "tmux_forwards_outdated_and_restored_codex_titles_without_restarting_codex",
+        "reconnect_restores_history_permissions_and_keeps_old_input_paused"
+      ]
+    },
+    {
+      "id": "gnu-linux-freed-heap-reclamation",
+      "owner": "codex-cli",
+      "contract": "GNU/Linux CLI configures glibc before thread creation, then reclaims free arena pages on a coarse background worker after arg0 dispatch, without changing live allocations, child environment, or other platform allocators.",
+      "tests": [
+        "large_freed_buffers_do_not_pin_the_arena",
+        "allocator_policy_is_configured_before_cli_threads_start",
+        "background_worker_reclaims_small_freed_buffers_and_stops_promptly"
+      ]
+    }
+  ]
+}

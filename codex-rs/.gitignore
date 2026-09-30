@@ -1,2 +1,3 @@
-/target/
-/target-*/
+# Ignore build directories and symlinks to external build caches.
+/target
+/target-*
