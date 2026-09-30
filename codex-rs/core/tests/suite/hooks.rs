@@ -1898,22 +1898,19 @@ async fn async_hook_finishing_while_idle_waits_for_the_next_turn(
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let responses = mount_sse_sequence(
-        &server,
-        vec![
-            sse(vec![
-                ev_response_created("resp-1"),
-                ev_assistant_message("msg-1", "first turn completed"),
-                ev_completed("resp-1"),
-            ]),
-            sse(vec![
-                ev_response_created("resp-2"),
-                ev_assistant_message("msg-2", "idle async context observed"),
-                ev_completed("resp-2"),
-            ]),
-        ],
-    )
-    .await;
+    let response_sequence = vec![
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_assistant_message("msg-1", "first turn completed"),
+            ev_completed("resp-1"),
+        ]),
+        sse(vec![
+            ev_response_created("resp-2"),
+            ev_assistant_message("msg-2", "idle async context observed"),
+            ev_completed("resp-2"),
+        ]),
+    ];
+    let responses = mount_sse_sequence(&server, response_sequence).await;
 
     let test = test_codex()
         .with_pre_build_hook(|home| {
