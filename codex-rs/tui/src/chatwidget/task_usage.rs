@@ -18,6 +18,9 @@ use crate::history_cell::HistoryCell;
 use crate::token_usage::TokenUsage;
 use crate::token_usage::TokenUsageInfo;
 
+use super::task_workspace::TaskWorkspaceTracker;
+use super::task_workspace::WorkspaceDiffStats;
+
 const WEEKLY_LIMIT_WINDOW_MINUTES: i64 = 7 * 24 * 60;
 const PLUS_WEEKLY_CREDIT_PERCENT_DENOMINATOR: f64 = 27_000_000.0;
 const TASK_USAGE_RAW_DIVIDER_WIDTH: usize = 80;
@@ -30,7 +33,8 @@ pub(super) struct TaskUsageBaseline {
     descendant_response_event_ids: HashSet<String>,
     turn_id: String,
     model: String,
-    diff_stats: TaskDiffStats,
+    diff_stats: WorkspaceDiffStats,
+    workspace_tracker: TaskWorkspaceTracker,
     started_at: Instant,
     first_output_ms: Option<u64>,
     local_tool_intervals_ms: Vec<(u64, u64)>,
@@ -66,25 +70,7 @@ impl TaskUsageContribution {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(super) struct TaskDiffStats {
-    pub(super) files_changed: usize,
-    pub(super) files_created: usize,
-    pub(super) files_deleted: usize,
-    pub(super) lines_added: usize,
-    pub(super) lines_removed: usize,
-}
-
-impl TaskDiffStats {
-    pub(super) fn is_empty(self) -> bool {
-        self == Self::default()
-    }
-
-    pub(super) fn files_modified(self) -> usize {
-        self.files_changed
-            .saturating_sub(self.files_created.saturating_add(self.files_deleted))
-    }
-}
+type TaskDiffStats = WorkspaceDiffStats;
 
 #[derive(Debug, Default)]
 struct TaskTiming {
@@ -111,6 +97,9 @@ impl ChatWidget {
             turn_id: turn_id.clone(),
             model,
             diff_stats: TaskDiffStats::default(),
+            workspace_tracker: TaskWorkspaceTracker::start(
+                (!turn_id.is_empty()).then_some(turn_id.as_str()),
+            ),
             started_at: Instant::now(),
             first_output_ms: None,
             local_tool_intervals_ms: Vec::new(),
@@ -191,6 +180,17 @@ impl ChatWidget {
         }
     }
 
+    pub(super) fn record_task_file_changes(
+        &mut self,
+        changes: &[codex_app_server_protocol::FileUpdateChange],
+    ) {
+        if let Some(baseline) = self.turn_lifecycle.task_usage_baseline.as_mut() {
+            baseline
+                .workspace_tracker
+                .record_file_changes(changes, &self.config.cwd);
+        }
+    }
+
     pub(super) fn observe_weekly_plan_remaining(&mut self, current: Option<f64>) {
         self.task_usage_ledger.observe_endpoint_remaining(current);
     }
@@ -249,7 +249,10 @@ impl ChatWidget {
         duration_ms: Option<i64>,
         runtime_metrics: RuntimeMetricsSummary,
     ) -> Option<TaskUsageSummaryEvent> {
-        let baseline = self.turn_lifecycle.task_usage_baseline.take()?;
+        let mut baseline = self.turn_lifecycle.task_usage_baseline.take()?;
+        baseline
+            .diff_stats
+            .add_assign(baseline.workspace_tracker.finish());
         let diff_stats = baseline.diff_stats;
         let end_usage = self.total_token_usage();
         let mut usage = baseline.token_usage.as_ref().map_or_else(

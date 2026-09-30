@@ -395,6 +395,7 @@ pub(crate) mod task_usage;
 pub(crate) use self::task_usage::TaskUsageContribution;
 mod task_usage_ledger;
 mod task_usage_scope;
+mod task_workspace;
 mod tool_lifecycle;
 mod tool_requests;
 mod transcript;
