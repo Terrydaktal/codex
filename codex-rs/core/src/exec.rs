@@ -948,7 +948,6 @@ async fn exec(
                 network_proxy_environment_error(network_environment_id.as_deref(), err)
             })?;
     }
-
     let (program, args) = command.split_first().ok_or_else(|| {
         CodexErr::Io(io::Error::new(
             io::ErrorKind::InvalidInput,

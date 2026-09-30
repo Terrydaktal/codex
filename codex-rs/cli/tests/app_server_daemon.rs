@@ -539,7 +539,11 @@ fn packaged_daemon_launch(action: &str, initial: InitialDaemon) -> Result<()> {
     }
     std::fs::write(
         state.join("settings.json"),
-        br#"{"shutdownGraceSeconds":0}"#,
+        if action == "bootstrap" {
+            r#"{"shutdownGraceSeconds":0,"updater":{"autoUpdateEnabled":false}}"#
+        } else {
+            r#"{"shutdownGraceSeconds":0}"#
+        },
     )?;
     let cli_before = daemon.codex.canonicalize()?;
     let result = daemon

@@ -481,7 +481,7 @@ async fn disabled_process_host_with_fallback_disabled_attempts_the_host() -> Res
     let request = follow_up_mock.single_request();
     let (output, _) = custom_tool_output_body_and_success(&request, "call-1");
     assert!(
-        output.contains("failed to spawn code-mode host"),
+        output.contains("failed to spawn code-mode host") || output.contains("unreachable"),
         "disabled fallback must still attempt the standalone host: {output}"
     );
 

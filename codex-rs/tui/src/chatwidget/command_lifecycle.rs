@@ -25,6 +25,7 @@ impl ChatWidget {
             process_id,
             source,
             command_actions,
+            cwd: _,
             ..
         } = &item
         else {
