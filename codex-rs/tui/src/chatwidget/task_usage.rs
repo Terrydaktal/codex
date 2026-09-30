@@ -33,7 +33,7 @@ pub(super) struct TaskUsageBaseline {
     diff_stats: TaskDiffStats,
     started_at: Instant,
     first_output_ms: Option<u64>,
-    local_tool_duration_ms: u64,
+    local_tool_intervals_ms: Vec<(u64, u64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -113,7 +113,7 @@ impl ChatWidget {
             diff_stats: TaskDiffStats::default(),
             started_at: Instant::now(),
             first_output_ms: None,
-            local_tool_duration_ms: 0,
+            local_tool_intervals_ms: Vec::new(),
         });
     }
 
@@ -130,8 +130,10 @@ impl ChatWidget {
         if let Some(duration_ms) = duration_ms.and_then(|value| u64::try_from(value).ok())
             && let Some(baseline) = self.turn_lifecycle.task_usage_baseline.as_mut()
         {
-            baseline.local_tool_duration_ms =
-                baseline.local_tool_duration_ms.saturating_add(duration_ms);
+            let end_ms =
+                u64::try_from(baseline.started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let start_ms = end_ms.saturating_sub(duration_ms);
+            baseline.local_tool_intervals_ms.push((start_ms, end_ms));
         }
     }
 
@@ -265,7 +267,7 @@ impl ChatWidget {
             .zip(baseline.descendant_weekly_limit_used_percent)
             .map(|(root, descendants)| root + descendants);
         #[cfg(not(test))]
-        let local_tool_time_ms = baseline.local_tool_duration_ms;
+        let local_tool_time_ms = union_duration_ms(&baseline.local_tool_intervals_ms);
         #[cfg(test)]
         let local_tool_time_ms = 0_u64;
         #[cfg(not(test))]
@@ -480,6 +482,32 @@ fn token_usage_add_assign(total: &mut TokenUsage, contribution: &TokenUsage) {
         .reasoning_output_tokens
         .saturating_add(contribution.reasoning_output_tokens);
     total.total_tokens = total.total_tokens.saturating_add(contribution.total_tokens);
+}
+
+fn union_duration_ms(intervals: &[(u64, u64)]) -> u64 {
+    let mut intervals = intervals
+        .iter()
+        .copied()
+        .filter(|(start, end)| start < end)
+        .collect::<Vec<_>>();
+    intervals.sort_unstable();
+
+    let Some((mut current_start, mut current_end)) = intervals.first().copied() else {
+        return 0;
+    };
+    let mut total = 0u64;
+
+    for (start, end) in intervals.into_iter().skip(1) {
+        if start > current_end {
+            total = total.saturating_add(current_end - current_start);
+            current_start = start;
+            current_end = end;
+        } else {
+            current_end = current_end.max(end);
+        }
+    }
+
+    total.saturating_add(current_end - current_start)
 }
 
 fn task_usage_lines(

@@ -143,3 +143,35 @@ fn runtime_metrics_summary_collects_tool_api_and_streaming_metrics() -> Result<(
 
     Ok(())
 }
+
+#[test]
+fn runtime_timing_summary_survives_without_a_metrics_exporter() {
+    let manager = SessionTelemetry::new(
+        ThreadId::new(),
+        "gpt-5.6-sol",
+        "gpt-5.6-sol",
+        None,
+        None,
+        None,
+        "test_originator".to_string(),
+        /*log_user_prompts*/ false,
+        "tty".to_string(),
+        SessionSource::Cli,
+    );
+    let ws_timing_response: std::result::Result<
+        Option<std::result::Result<Message, tokio_tungstenite::tungstenite::Error>>,
+        codex_api::ApiError,
+    > = Ok(Some(Ok(Message::Text(
+        r#"{"type":"responsesapi.websocket_timing","timing_metrics":{"responses_duration_excl_engine_and_client_tool_time_ms":124,"engine_service_total_ms":457}}"#.into(),
+    ))));
+
+    manager.record_websocket_event(&ws_timing_response, Duration::from_millis(20));
+    manager.record_turn_ttft(Duration::from_millis(95));
+
+    let summary = manager
+        .runtime_metrics_summary()
+        .expect("direct runtime timing should be available");
+    assert_eq!(summary.responses_api_overhead_ms, 124);
+    assert_eq!(summary.responses_api_inference_time_ms, 457);
+    assert_eq!(summary.turn_ttft_ms, 95);
+}
