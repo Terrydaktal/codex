@@ -125,6 +125,10 @@ workaround. Do not export the old manual grapheme splitter or its snapshots;
 rely on upstream `wrapping::wrapped_lines` so future wrapping fixes continue to
 arrive with normal upgrades.
 
+Activity preview rows must not expand on mouse clicks. Preserve ordinary text
+selection and the advertised Ctrl+T full-transcript shortcut; its input and
+rendering regression lives in `app/owned_transcript_input_tests.rs`.
+
 ## Files deliberately not ported
 
 `codex-rs/Cargo.lock` is regenerated for the target release. The source tree's

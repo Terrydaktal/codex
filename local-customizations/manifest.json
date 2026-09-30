@@ -21,6 +21,7 @@
     "codex-rs/app-server/src/request_processors_tests.rs",
     "codex-rs/app-server/src/request_processors/resume_history_cache.rs",
     "codex-rs/app-server/src/request_processors/resume_history_cache_tests.rs",
+    "codex-rs/tui/src/app/snapshots/codex_tui__app__owned_transcript__input_tests__command_output_ctrl_t.snap",
     "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__task_usage__tests__task_usage_lines_show_colored_task_summary.snap",
     "codex-rs/tui/src/chatwidget/task_usage.rs",
     "codex-rs/tui/src/chatwidget/task_usage_ledger.rs",

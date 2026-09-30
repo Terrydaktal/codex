@@ -1,0 +1,107 @@
+---
+source: tui/src/app/owned_transcript_input_tests.rs
+expression: "snapshots.join(\"\\n\\n\")"
+---
+compact
+• Ran show-output
+  └ output 10
+    output 11
+    output 12
+    + 9 lines (ctrl+t to expand)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-5.6-Sol default · /tmp/project
+  ? for shortcuts
+
+pointer
+• Ran show-output
+  └ output 10
+    output 11
+    output 12
+    + 9 lines (ctrl+t to expand)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-5.6-Sol default · /tmp/project
+  ? for shortcuts
+
+ctrl+t
+$ show-output
+output 01
+output 02
+output 03
+output 04
+output 05
+output 06
+output 07
+output 08
+output 09
+output 10
+output 11
+output 12
+✓ • 20ms
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-5.6-Sol default · /tmp/project
+  ? for shortcuts
+
+ctrl+t again
+• Ran show-output
+  └ output 10
+    output 11
+    output 12
+    + 9 lines (ctrl+t to expand)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+› Ask Codex to do anything
+
+  GPT-5.6-Sol default · /tmp/project
+  ? for shortcuts

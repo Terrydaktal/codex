@@ -348,9 +348,6 @@ impl TranscriptView {
         event: MouseEvent,
         cells: &[Arc<dyn HistoryCell>],
     ) -> Option<ViewAction> {
-        if event.modifiers.is_empty() && self.toggle_disclosure_at(cells, event.column, event.row) {
-            return Some(ViewAction::Changed);
-        }
         self.disclosure.focused = None;
         let visible = self
             .visible
