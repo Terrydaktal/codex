@@ -317,7 +317,7 @@ fn copied_selection_keeps_its_revision_and_format_across_resize() {
                 &(1, Ok(CopyStatus::Confirmed)),
                 /*current*/ true
             ),
-            Some(false)
+            Some(())
         );
         assert_eq!(view.has_selection_range(), !clear_selection);
     }

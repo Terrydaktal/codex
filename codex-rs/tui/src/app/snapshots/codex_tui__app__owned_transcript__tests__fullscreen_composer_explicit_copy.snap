@@ -26,18 +26,6 @@ ctrl-c Ok(Confirmed)
 hello world
 ···········
 
-right-click Err("clipboard unavailable")
-hello world
-^^^^^······
-
-right-click Ok(Unconfirmed)
-hello world
-^^^^^······
-
-right-click Ok(Confirmed)
-hello world
-···········
-
 
 › transcript text
 

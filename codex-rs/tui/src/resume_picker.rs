@@ -335,7 +335,6 @@ struct SessionPickerViewPersistence {
 
 struct SessionPickerRunOptions {
     use_theme_colors: bool,
-    copy_on_select: bool,
     show_all: bool,
     filter_cwd: Option<PathBuf>,
     local_filter_cwd: Option<PathBuf>,
@@ -446,7 +445,6 @@ async fn run_resume_picker_with_launch_context(
     let runtime_keymap = picker_runtime_keymap(local_settings)?;
     let options = SessionPickerRunOptions {
         use_theme_colors: local_settings.tui.status_line_use_colors,
-        copy_on_select: local_settings.copy_on_select(&codex_terminal_detection::terminal_info()),
         show_all,
         filter_cwd: cwd_filter,
         local_filter_cwd,
@@ -506,7 +504,6 @@ pub async fn run_fork_picker_with_app_server(
     let runtime_keymap = picker_runtime_keymap(local_settings)?;
     let options = SessionPickerRunOptions {
         use_theme_colors: local_settings.tui.status_line_use_colors,
-        copy_on_select: local_settings.copy_on_select(&codex_terminal_detection::terminal_info()),
         show_all,
         filter_cwd: cwd_filter,
         local_filter_cwd,
@@ -561,7 +558,6 @@ async fn run_session_picker_with_loader(
     );
     state.local_filter_cwd = options.local_filter_cwd;
     state.use_theme_colors = options.use_theme_colors;
-    state.copy_on_select = options.copy_on_select;
     state.worktrees_enabled = options.worktrees_enabled;
     state.density = options.initial_density;
     state.view_persistence = options.view_persistence;
@@ -832,7 +828,6 @@ impl Drop for AltScreenGuard<'_> {
 struct PickerState {
     clock_format: ClockFormat,
     use_theme_colors: bool,
-    copy_on_select: bool,
     // Resolve local filesystem membership once per cwd for each page-loading cycle.
     local_cwd_matches: HashMap<PathBuf, bool>,
     requester: FrameRequester,
@@ -1033,7 +1028,6 @@ impl PickerState {
         Self {
             clock_format: ClockFormat::system(),
             use_theme_colors: true,
-            copy_on_select: false,
             requester,
             relative_time_reference: None,
             pagination: PaginationState::new(),
@@ -1135,11 +1129,7 @@ impl PickerState {
         else {
             return;
         };
-        let mut overlay = Overlay::new_transcript(
-            cells.clone(),
-            self.keymap.pager.clone(),
-            self.copy_on_select,
-        );
+        let mut overlay = Overlay::new_transcript(cells.clone(), self.keymap.pager.clone());
         if let Overlay::Transcript(view) = &mut overlay {
             view.set_keymap_bindings(&self.keymap);
         }

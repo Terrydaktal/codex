@@ -1,5 +1,5 @@
 ---
-source: tui/src/transcript_view/right_click_copy_tests.rs
+source: tui/src/transcript_view/copy_delivery_tests.rs
 expression: "frames.join(\"\\n\\n\")"
 ---
 Err("clipboard unavailable")

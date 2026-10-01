@@ -102,14 +102,14 @@ fn selection_at_bottom_restores_footer_without_resuming_following() {
         ));
     }
     insta::assert_snapshot!(observations.join("\n"), @"
-    Partial, selected at bottom: ctrl+c copy · enter copy & follow · esc clear
+    Partial, selected at bottom: ctrl+c copy · esc clear
     Partial, clicked away: <composer hints>
     Partial, scrolled down at bottom: <composer hints>
-    Partial, selected above bottom: Earlier messages available.  ctrl+c copy · enter copy & follow · esc clear
-    Complete, selected at bottom: ctrl+c copy · enter copy & follow · esc clear
+    Partial, selected above bottom: Earlier messages available.  ctrl+c copy · esc clear
+    Complete, selected at bottom: ctrl+c copy · esc clear
     Complete, clicked away: <composer hints>
     Complete, scrolled down at bottom: <composer hints>
-    Complete, selected above bottom: ctrl+c copy · enter copy & follow · esc clear
+    Complete, selected above bottom: ctrl+c copy · esc clear
     ");
 }
 
@@ -191,7 +191,7 @@ fn loading_preserves_selected_content_and_copy_action() {
             .expect("loading selection footer");
         assert_eq!((footer.cursor_column, footer.is_interactive), (None, true));
         insta::allow_duplicates! {
-            insta::assert_snapshot!(footer.text.to_string(), @"↑ Loading earlier messages… · ctrl+c copy · enter copy & follow · esc clear");
+            insta::assert_snapshot!(footer.text.to_string(), @"↑ Loading earlier messages… · ctrl+c copy · esc clear");
         }
         let Some(ViewAction::Copy(copied)) = view.handle_key(
             KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
@@ -209,7 +209,7 @@ fn loading_preserves_selected_content_and_copy_action() {
     let footer = view
         .footer(/*width*/ 80, MotionMode::Reduced)
         .expect("selection footer after loading");
-    insta::assert_snapshot!(footer.text.to_string(), @"ctrl+c copy · enter copy & follow · esc clear");
+    insta::assert_snapshot!(footer.text.to_string(), @"ctrl+c copy · esc clear");
     assert_eq!(
         view.selected_text(&cells),
         Some("selected words".to_string())
@@ -221,12 +221,12 @@ fn loading_preserves_selected_content_and_copy_action() {
             .text
             .to_string(),
         format!(
-            "ctrl+c copy · enter copy & follow · esc clear · Retry: {}",
+            "ctrl+c copy · esc clear · Retry: {}",
             JumpTarget::Beginning.hint_label(),
         ),
     );
     insta::assert_snapshot!(view.footer(/*width*/ 38, MotionMode::Reduced).unwrap().text.to_string(),
-        @"enter copy & follow · esc clear");
+        @"ctrl+c copy · esc clear");
 }
 
 #[test]

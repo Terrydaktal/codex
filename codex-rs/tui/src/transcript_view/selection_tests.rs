@@ -64,7 +64,6 @@ fn copy_shortcuts_clear_selection_only_after_confirmed_delivery() {
         "selected\tca\rfé\x1b\u{85}".into(),
     ]))];
     for key in [
-        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
         KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
         KeyEvent::new(KeyCode::Char('c'), KeyModifiers::SUPER),
         KeyEvent::new(
@@ -86,11 +85,7 @@ fn copy_shortcuts_clear_selection_only_after_confirmed_delivery() {
                 }
                 view.begin_selection(&cells, /*column*/ 0, /*row*/ 0, /*clicks*/ 3);
                 let action = view.handle_key(key, &cells);
-                assert_eq!(
-                    matches!(&action, Some(ViewAction::CopyAndFollow(_))),
-                    key.code == KeyCode::Enter
-                );
-                let Some(ViewAction::Copy(text) | ViewAction::CopyAndFollow(text)) = action else {
+                let Some(ViewAction::Copy(text)) = action else {
                     panic!("selection key must request a copy");
                 };
                 assert_eq!(text, "selected\tcafé");
@@ -109,9 +104,7 @@ fn copy_shortcuts_clear_selection_only_after_confirmed_delivery() {
                     Some("selected\tcafé")
                 );
 
-                let Some(ViewAction::Copy(text) | ViewAction::CopyAndFollow(text)) =
-                    view.handle_key(key, &cells)
-                else {
+                let Some(ViewAction::Copy(text)) = view.handle_key(key, &cells) else {
                     panic!("failed copy must remain retryable");
                 };
                 let copied = view.copy_selected_text_with(
@@ -184,17 +177,29 @@ fn command_c_ignores_release_and_copies_only_an_active_selection() {
 }
 
 #[test]
-fn enter_on_an_empty_selection_does_not_copy_or_reach_the_composer() {
+fn selection_reserves_enter_until_esc_clears_it() {
     let cells: Vec<Arc<dyn HistoryCell>> =
         vec![Arc::new(PlainHistoryCell::new(vec!["select this".into()]))];
-    let mut view = TranscriptView::default();
-    render(&mut view, &cells, /*width*/ 32, /*height*/ 3);
-    view.begin_selection(&cells, /*column*/ 0, /*row*/ 0, /*clicks*/ 1);
-    assert!(matches!(
-        view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &cells),
-        Some(ViewAction::Changed)
-    ));
-    assert_eq!(view.selected_text(&cells), None);
+    for clicks in [1, 3] {
+        let mut view = TranscriptView::default();
+        render(&mut view, &cells, /*width*/ 32, /*height*/ 3);
+        view.begin_selection(&cells, /*column*/ 0, /*row*/ 0, clicks);
+        let selected = view.selected_text(&cells);
+        let position = view.position;
+        assert!(matches!(
+            view.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &cells),
+            Some(ViewAction::Changed)
+        ));
+        assert_eq!(
+            (view.selected_text(&cells), view.position),
+            (selected, position)
+        );
+        assert!(matches!(
+            view.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE), &cells),
+            Some(ViewAction::Changed)
+        ));
+        assert_eq!(view.selected_text(&cells), None);
+    }
 }
 
 fn agent(lines: &[&str]) -> Arc<dyn HistoryCell> {
@@ -651,7 +656,6 @@ fn pending_copy_only_finishes_the_original_selection() {
             |_, _format| Ok(CopyStatus::Pending(1)),
         )
         .unwrap();
-        view.follow_pending_copy();
         match change {
             "replace" => {
                 view.begin_selection(&cells, /*column*/ 0, /*row*/ 0, /*clicks*/ 3)
@@ -667,7 +671,7 @@ fn pending_copy_only_finishes_the_original_selection() {
         }
         let before = view.selected_text(&cells);
         let result = view.finish_copy(&cells, &(1, Ok(CopyStatus::Confirmed)), change != "hide");
-        assert_eq!(result, (change == "none").then_some(/*t*/ true), "{change}");
+        assert_eq!(result, (change == "none").then_some(()), "{change}");
         assert_eq!(
             view.selected_text(&cells),
             if change == "none" { None } else { before }

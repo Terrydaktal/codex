@@ -1344,9 +1344,9 @@ fn row_containing(tui: &tui::Tui, text: &str) -> u16 {
 }
 
 #[tokio::test]
-async fn fullscreen_composer_mouse_copy_and_input_ownership() -> Result<()> {
+async fn fullscreen_composer_explicit_copy_and_input_ownership() -> Result<()> {
     let mut app = crate::app::test_support::make_test_app().await;
-    app.local_settings.tui.copy_on_select = CopyOnSelect::Never;
+    app.local_settings.tui.copy_on_select = CopyOnSelect::Always;
     let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
     let mut tui = crate::tui::test_support::make_test_tui()?;
     tui.set_owned_screen(/*owned*/ true)?;
@@ -1380,6 +1380,7 @@ async fn fullscreen_composer_mouse_copy_and_input_ownership() -> Result<()> {
     let draft = app.chat_widget.capture_thread_input_state();
     for event in [
         mouse(Up(Right), x + 2, y),
+        mouse(Down(Right), x + 2, y),
         mouse(Down(Right), /*column*/ 0, y),
         mouse(Down(Right), size.width, y),
         mouse(Down(Right), x, y - 1),
@@ -1390,7 +1391,6 @@ async fn fullscreen_composer_mouse_copy_and_input_ownership() -> Result<()> {
     let copy_events = [
         TuiEvent::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::SUPER)),
         TuiEvent::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
-        mouse(Down(Right), x + 2, y),
     ];
     let mut selection_frames = Vec::new();
     for (index, event) in copy_events.iter().enumerate() {
@@ -1448,7 +1448,6 @@ async fn fullscreen_composer_mouse_copy_and_input_ownership() -> Result<()> {
                 )
             );
             let gesture = match event {
-                TuiEvent::Mouse(_) => "right-click",
                 TuiEvent::Key(key) if key.modifiers == KeyModifiers::SUPER => "cmd-c",
                 _ => "ctrl-c",
             };
@@ -1461,7 +1460,7 @@ async fn fullscreen_composer_mouse_copy_and_input_ownership() -> Result<()> {
     app.render_owned_transcript(&mut tui, size)?;
     assert!(row_containing(&tui, "Copied 5 chars to host clipboard") < y);
     insta::assert_snapshot!(
-        "fullscreen_composer_right_click_copy",
+        "fullscreen_composer_explicit_copy",
         format!(
             "{}\n\n{}",
             selection_frames.join("\n\n"),

@@ -219,7 +219,7 @@ async fn focus_loss_stops_edge_drag_and_preserves_selection_after_focus_returns(
     row 05
     row 06
     row 07
-    enter copy & follow · esc clear
+    ctrl+c copy · esc clear
     ");
     overlay.view.jump_to_latest();
     overlay.render(area, &mut Buffer::empty(area));

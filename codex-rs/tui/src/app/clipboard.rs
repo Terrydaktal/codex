@@ -41,14 +41,7 @@ impl App {
             self.transcript_view
                 .show_copy_feedback(&completion.1, characters);
         }
-        let follow = self
-            .transcript_view
+        self.transcript_view
             .finish_copy(&self.transcript_cells, completion, current);
-        if follow == Some(true) {
-            if self.backtrack.overlay_preview_active {
-                self.close_transcript_overlay(tui);
-            }
-            self.transcript_view.jump_to_latest();
-        }
     }
 }

@@ -14,7 +14,6 @@ struct PendingCopy {
     end: Anchor,
     position: Position,
     detailed: bool,
-    follow: bool,
     clear_selection: bool,
 }
 
@@ -214,8 +213,8 @@ impl TranscriptView {
         Some(text)
     }
 
-    /// Track delivery for the current selection. Explicit copies release it on confirmation;
-    /// automatic copies, failures, and unacknowledged terminal writes retain the revision.
+    /// Track explicit delivery for the current selection. Failures and unacknowledged
+    /// terminal writes retain the revision so the user can retry copying it.
     pub(crate) fn copy_selected_text_with(
         &mut self,
         cells: &[Arc<dyn HistoryCell>],
@@ -251,7 +250,6 @@ impl TranscriptView {
                         end: selection.end,
                         position: self.position,
                         detailed: self.detailed,
-                        follow: false,
                         clear_selection,
                     });
                 }
@@ -265,23 +263,13 @@ impl TranscriptView {
         result
     }
 
-    pub(crate) fn follow_pending_copy(&mut self) {
-        if let Some(pending) = self
-            .selection
-            .as_mut()
-            .and_then(|s| s.pending_copy.as_mut())
-        {
-            pending.follow = true;
-        }
-    }
-
     /// A replaced selection has no ticket; moved endpoints cannot consume an old completion.
     pub(crate) fn finish_copy(
         &mut self,
         cells: &[Arc<dyn HistoryCell>],
         completion: &(u64, crate::clipboard_copy::worker::CopyResult),
         current: bool,
-    ) -> Option<bool> {
+    ) -> Option<()> {
         // Feedback also belongs to composer copies and survives selection changes. Complete
         // its matching ticket even when the selection can no longer consume the result.
         if let Some(feedback) = &self.copy_feedback
@@ -316,7 +304,7 @@ impl TranscriptView {
             self.end_selection(cells);
         }
         self.show_copy_feedback(&completion.1, characters);
-        Some(pending.follow && completion.1 == Ok(crate::clipboard_copy::CopyStatus::Confirmed))
+        Some(())
     }
 
     /// A stationary click begun at Latest still belongs to the fresh screen until it selects text.
