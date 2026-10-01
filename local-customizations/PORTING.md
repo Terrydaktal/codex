@@ -118,6 +118,16 @@ before accepting the clipboard's text payload, because some terminals never
 deliver Ctrl+V as a key event. Preserve both paths and the injectable image
 paster used by the regression tests; Alt+V alone is not an image-paste shortcut.
 
+Selection must not write to the clipboard. Only explicit copy shortcuts
+(Ctrl+C, Ctrl+Shift+C, and Cmd+C) copy selected transcript or composer text;
+mouse release, right-click, and Enter do not. Enter is reserved while selecting
+so it cannot accidentally submit a draft or rewind a turn. Preserve the shared
+`transcript_view/input.rs` policy in fullscreen,
+Ctrl+T, and session previews. The upstream `tui.copy_on_select` config remains
+loadable for compatibility but is deliberately not used by this build.
+Regressions live in `transcript_view/manual_copy_tests.rs`,
+`transcript_view/copy_delivery_tests.rs`, and the composer/owned-transcript tests.
+
 ## Textarea wrapping
 
 Codex v0.153's upstream textarea wrapper supersedes the local v0.147 line-wrap

@@ -2,9 +2,9 @@ use super::*;
 use crate::legacy_core::config::ConfigBuilder;
 use crate::legacy_core::config::edit::ConfigEditsBuilder;
 use codex_config::LoaderOverrides;
+use codex_config::types::CopyOnSelect;
 use codex_config::types::RightClickPaste;
 use codex_config::types::SessionPickerViewMode;
-use codex_terminal_detection::Multiplexer;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
@@ -194,7 +194,7 @@ fast_default_opt_out = true
 }
 
 #[tokio::test]
-async fn copy_on_select_respects_terminal_defaults_and_config_overrides() -> anyhow::Result<()> {
+async fn legacy_copy_on_select_configuration_remains_loadable() -> anyhow::Result<()> {
     for (configured, launch_override, expected) in [
         (None, None, CopyOnSelect::Auto),
         (Some("auto"), None, CopyOnSelect::Auto),
@@ -231,67 +231,6 @@ async fn copy_on_select_respects_terminal_defaults_and_config_overrides() -> any
             (config.tui_copy_on_select, local.tui.copy_on_select),
             (expected, expected),
         );
-        for (name, version, multiplexer, default_enabled) in [
-            (TerminalName::Iterm2, None, None, true),
-            (TerminalName::AppleTerminal, None, None, true),
-            (TerminalName::Ghostty, Some("1.2.0"), None, false),
-            (TerminalName::Ghostty, Some("1.3.0"), None, false),
-            (TerminalName::Ghostty, Some("1.1.3"), None, true),
-            (TerminalName::Ghostty, Some("1.2.0-dev"), None, true),
-            (TerminalName::Ghostty, Some("invalid"), None, true),
-            (TerminalName::Ghostty, None, None, true),
-            (TerminalName::Kitty, None, None, !cfg!(target_os = "macos")),
-            (TerminalName::WindowsTerminal, None, None, false),
-            (
-                TerminalName::VsCode,
-                None,
-                None,
-                !cfg!(target_os = "windows"),
-            ),
-            (TerminalName::Alacritty, None, None, true),
-            (TerminalName::GnomeTerminal, None, None, true),
-            (TerminalName::Konsole, None, None, true),
-            (TerminalName::Vte, None, None, true),
-            (TerminalName::WarpTerminal, None, None, true),
-            (TerminalName::WezTerm, None, None, true),
-            (TerminalName::Dumb, None, None, true),
-            (TerminalName::Unknown, None, None, true),
-            (
-                TerminalName::Ghostty,
-                Some("1.3.0"),
-                Some(Multiplexer::Tmux { version: None }),
-                true,
-            ),
-            (
-                TerminalName::Kitty,
-                None,
-                Some(Multiplexer::Zellij { version: None }),
-                true,
-            ),
-            (
-                TerminalName::WindowsTerminal,
-                None,
-                Some(Multiplexer::Tmux { version: None }),
-                true,
-            ),
-        ] {
-            let terminal = TerminalInfo {
-                name,
-                multiplexer,
-                term_program: None,
-                version: version.map(str::to_owned),
-                term: None,
-            };
-            assert_eq!(
-                local.copy_on_select(&terminal),
-                match expected {
-                    CopyOnSelect::Auto => default_enabled,
-                    CopyOnSelect::Always => true,
-                    CopyOnSelect::Never => false,
-                },
-                "terminal={terminal:?}, override={expected:?}",
-            );
-        }
         assert_eq!(std::fs::read_to_string(config_path)?, config_text);
     }
     Ok(())

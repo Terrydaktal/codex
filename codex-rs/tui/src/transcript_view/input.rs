@@ -1,8 +1,8 @@
 //! Transcript gestures leave ordinary typing and composer editing with the existing input path.
 //! Stationary link clicks open on release; dragging or scrolling keeps the gesture in selection.
 //! Shift-click extends the existing selection from its original text unit.
-//! Optional automatic copying happens only when a nonempty mouse selection is released.
-//! Automatic copies retain the selection; explicit copies clear it after confirmed delivery.
+//! Selection never changes the clipboard. Only an explicit copy shortcut requests delivery.
+//! Enter is reserved while selecting; confirmed copies clear their selection.
 
 use crate::key_hint::KeyBindingListExt;
 use crossterm::event::KeyCode;
@@ -19,8 +19,6 @@ use super::*;
 pub(crate) enum ViewAction {
     Changed,
     Copy(String),
-    CopyOnSelect(String),
-    CopyAndFollow(String),
     OpenLink(String),
 }
 
@@ -230,12 +228,6 @@ impl TranscriptView {
         match event.kind {
             MouseEventKind::ScrollUp => self.scroll(cells, /*rows*/ -3),
             MouseEventKind::ScrollDown => self.scroll(cells, /*rows*/ 3),
-            MouseEventKind::Down(MouseButton::Right) if inside => {
-                return self
-                    .selected_text(cells)
-                    .filter(|text| !text.is_empty())
-                    .map(ViewAction::Copy);
-            }
             MouseEventKind::Down(MouseButton::Left) => return self.pointer_down(event, cells),
             MouseEventKind::Drag(MouseButton::Left) if dragging => {
                 self.extend_selection(event.column, event.row);
@@ -269,11 +261,6 @@ impl TranscriptView {
                 if let Some(link) = link {
                     return Some(ViewAction::OpenLink(link));
                 }
-                if self.copy_on_select
-                    && let Some(text) = selected.filter(|text| !text.is_empty())
-                {
-                    return Some(ViewAction::CopyOnSelect(text));
-                }
             }
             _ => return None,
         }
@@ -285,20 +272,15 @@ impl TranscriptView {
         key: KeyEvent,
         cells: &[Arc<dyn HistoryCell>],
     ) -> Option<ViewAction> {
-        if crate::text_selection::is_copy_key(key)
-            || (key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Enter)
-        {
+        if crate::text_selection::is_copy_key(key) {
             return Some(
                 self.selected_text(cells)
                     .filter(|text| !text.is_empty())
-                    .map_or(ViewAction::Changed, |text| {
-                        if key.code == KeyCode::Enter {
-                            ViewAction::CopyAndFollow(text)
-                        } else {
-                            ViewAction::Copy(text)
-                        }
-                    }),
+                    .map_or(ViewAction::Changed, ViewAction::Copy),
             );
+        }
+        if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Enter {
+            return Some(ViewAction::Changed);
         }
         if key.code == KeyCode::Esc {
             self.end_selection(cells);
@@ -395,5 +377,5 @@ impl TranscriptView {
 mod tests;
 
 #[cfg(test)]
-#[path = "right_click_copy_tests.rs"]
-mod right_click_copy_tests;
+#[path = "copy_delivery_tests.rs"]
+mod copy_delivery_tests;

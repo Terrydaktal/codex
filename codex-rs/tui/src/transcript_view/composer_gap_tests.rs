@@ -42,7 +42,7 @@ fn pending_copy_feedback_survives_expiry_and_selection_replacement() {
             &(1, Err("setup timed out".into())),
             /*current*/ true
         ),
-        Some(false)
+        Some(())
     );
     assert_eq!(view.selected_text(&cells), Some(selected));
     buffer.reset();

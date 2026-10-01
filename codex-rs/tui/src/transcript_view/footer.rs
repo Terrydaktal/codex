@@ -49,10 +49,7 @@ impl TranscriptView {
                 } else {
                     first_fitting_line(
                         [
-                            self.status_line_with_navigation(
-                                "ctrl+c copy · enter copy & follow · esc clear",
-                                motion,
-                            ),
+                            self.status_line_with_navigation("ctrl+c copy · esc clear", motion),
                             selection_hint(width),
                         ],
                         width,
@@ -191,13 +188,7 @@ impl TranscriptView {
 
 fn selection_hint(width: u16) -> Line<'static> {
     first_fitting_line(
-        [
-            "ctrl+c copy · enter copy & follow · esc clear",
-            "enter copy & follow · esc clear",
-            "enter copy+↓ · esc",
-            "esc clear",
-        ]
-        .map(navigation_line),
+        ["ctrl+c copy · esc clear", "ctrl+c copy · esc", "esc clear"].map(navigation_line),
         width,
     )
 }
@@ -213,9 +204,7 @@ pub(super) fn navigation_line(navigation: &str) -> Line<'static> {
             spans.push(" · ".dim());
         }
         let action = [
-            " copy & follow",
             " clear selection",
-            " copy+↓",
             " previous",
             " latest",
             " retry",

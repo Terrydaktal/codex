@@ -81,7 +81,6 @@ async fn blocked_copy_allows_overlay_exit_rejects_backlog_and_wakes_completion()
     let mut overlay = Overlay::new_transcript(
         vec![Arc::new(PlainHistoryCell::new(vec!["selected".into()]))],
         RuntimeKeymap::defaults().pager,
-        /*copy_on_select*/ false,
     );
     overlay
         .handle_event(

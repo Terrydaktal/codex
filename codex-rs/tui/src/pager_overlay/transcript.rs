@@ -171,18 +171,14 @@ impl TranscriptOverlay {
 
     pub(crate) fn handle_event(&mut self, tui: &mut tui::Tui, event: TuiEvent) -> Result<()> {
         if let Some(completion) = tui.clipboard.poll()
-            && let Some(follow) =
-                self.view
-                    .finish_copy(&self.cells, completion, /*current*/ true)
+            && let Some(()) = self
+                .view
+                .finish_copy(&self.cells, completion, /*current*/ true)
         {
             self.notice = Some(match &completion.1 {
                 Ok(status) => status.message("selection"),
                 Err(error) => format!("Copy failed: {error}"),
             });
-            if follow {
-                self.view.jump_to_latest();
-                self.is_done = self.browsing_footer.is_some();
-            }
         }
         if matches!(event, TuiEvent::Resume) {
             self.view.end_drag();
@@ -439,24 +435,15 @@ impl TranscriptOverlay {
 
     fn apply_action(&mut self, tui: &mut tui::Tui, action: ViewAction) {
         self.notice = None;
-        let resume_following = matches!(action, ViewAction::CopyAndFollow(_));
-        let copy_on_select = matches!(action, ViewAction::CopyOnSelect(_));
         match action {
             ViewAction::Changed => {}
-            ViewAction::Copy(text)
-            | ViewAction::CopyOnSelect(text)
-            | ViewAction::CopyAndFollow(text) => {
+            ViewAction::Copy(text) => {
                 let result = self.view.copy_selected_text_with(
                     &self.cells,
                     &text,
-                    !copy_on_select,
+                    /*clear_selection*/ true,
                     |text, format| tui.copy_transcript_selection(text, format),
                 );
-                if resume_following
-                    && matches!(result, Ok(crate::clipboard_copy::CopyStatus::Pending(_)))
-                {
-                    self.view.follow_pending_copy();
-                }
                 self.notice = Some(match result {
                     Ok(status) => status.message("selection"),
                     Err(error) => error,

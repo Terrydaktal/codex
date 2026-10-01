@@ -108,7 +108,7 @@ fn selected_text_navigation_does_not_recall_history_or_select_images() {
 }
 
 #[test]
-fn right_click_copy_uses_the_refreshed_editor_bounds() {
+fn ctrl_c_copies_mouse_selection_after_editor_reflow() {
     let (mut composer, _rx) = new_test_composer();
     composer.insert_str("hello world");
     let area = Rect::new(
@@ -130,7 +130,12 @@ fn right_click_copy_uses_the_refreshed_editor_bounds() {
         modifiers: KeyModifiers::NONE,
     };
     assert_eq!(
-        composer.copy_selection(&TuiEvent::Mouse(click), |text| {
+        composer.copy_selection(&TuiEvent::Mouse(click), |_| unreachable!()),
+        None
+    );
+    let key = TuiEvent::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    assert_eq!(
+        composer.copy_selection(&key, |text| {
             assert_eq!(text, "hello");
             Ok(CopyStatus::Unconfirmed)
         }),
@@ -148,15 +153,14 @@ fn right_click_copy_uses_the_refreshed_editor_bounds() {
     );
     let (_, row) = composer.cursor_pos(shifted_area).unwrap();
     assert_eq!(
-        composer.copy_selection(&TuiEvent::Mouse(MouseEvent { row, ..click }), |text| {
+        composer.copy_selection(&key, |text| {
             assert_eq!(text, "hello");
             Ok(CopyStatus::Unconfirmed)
         }),
         Some((5, Ok(CopyStatus::Unconfirmed)))
     );
     assert_eq!(composer.current_text(), "hello world");
-    let event = TuiEvent::Mouse(MouseEvent { row, ..click });
-    composer.copy_selection(&event, |_| Ok(CopyStatus::Pending(1)));
+    composer.copy_selection(&key, |_| Ok(CopyStatus::Pending(1)));
     // A fresh pointer selection must not be cleared by the older copy.
     for (kind, column) in [
         (Down(Left), x - 11),
@@ -171,7 +175,6 @@ fn right_click_copy_uses_the_refreshed_editor_bounds() {
         None
     );
     assert_eq!(composer.draft.textarea.mouse_selection_range(), selection);
-    let key = TuiEvent::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
     composer.copy_selection(&key, |_| Ok(CopyStatus::Pending(2)));
     assert_eq!(
         composer.finish_copy(&(2, Ok(CopyStatus::Confirmed)), /*current*/ true),

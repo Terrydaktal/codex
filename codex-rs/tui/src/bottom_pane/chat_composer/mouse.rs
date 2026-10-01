@@ -1,12 +1,12 @@
 //! Mouse gestures flush pending typing before layout and hit testing. Left dragging selects
 //! editable text using the textarea's last rendered viewport and hides completion suggestions.
 //! Double/triple clicks select words/logical lines using the transcript's shared gesture rules.
-//! Copy preserves the draft and cursor; confirmed copies clear selection for every gesture.
+//! Explicit copy shortcuts preserve the draft and cursor; confirmed copies clear selection.
+//! Mouse selection and right-clicking never copy the draft.
 
 use super::*;
 use crate::clipboard_copy::CopyStatus;
 use crate::tui::TuiEvent;
-use crossterm::event::MouseButton;
 use crossterm::event::MouseEvent;
 use crossterm::event::MouseEventKind;
 
@@ -32,10 +32,8 @@ impl ChatComposer {
         event: &TuiEvent,
         copy: impl FnOnce(&str) -> Result<CopyStatus, String>,
     ) -> Option<(usize, Result<CopyStatus, String>)> {
-        let copy_requested = matches!(event, TuiEvent::Key(key) if crate::text_selection::is_copy_key(*key))
-            || matches!(event, TuiEvent::Mouse(mouse)
-                    if mouse.kind == MouseEventKind::Down(MouseButton::Right)
-                        && self.draft.textarea.contains_mouse(*mouse));
+        let copy_requested =
+            matches!(event, TuiEvent::Key(key) if crate::text_selection::is_copy_key(*key));
         if !copy_requested
             || !self.draft.input_enabled
             || self.history_search.is_some()

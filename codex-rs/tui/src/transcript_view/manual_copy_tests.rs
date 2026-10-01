@@ -1,4 +1,4 @@
-//! Automatic copies retain completed mouse selections.
+//! Mouse gestures highlight text; explicit copy shortcuts alone request clipboard delivery.
 
 use super::*;
 use crate::clipboard_copy::CopyStatus;
@@ -6,6 +6,8 @@ use crate::history_cell::AgentMarkdownCell;
 use crate::transcript_view::tests::cell;
 use crate::transcript_view::tests::render;
 use crate::transcript_view::tests::text;
+use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
 use crossterm::event::MouseButton;
 use crossterm::event::MouseEvent;
@@ -23,13 +25,14 @@ fn mouse(kind: MouseEventKind, column: u16) -> MouseEvent {
 }
 
 #[test]
-fn copy_on_select_waits_for_release_and_retains_selection() {
+fn mouse_selection_then_ctrl_c_tracks_confirmed_delivery() {
     let cells = vec![cell("selected text")];
-    for enabled in [false, true] {
-        let mut view = TranscriptView {
-            copy_on_select: enabled,
-            ..Default::default()
-        };
+    for result in [
+        Ok(CopyStatus::Confirmed),
+        Ok(CopyStatus::Unconfirmed),
+        Err("clipboard unavailable".to_owned()),
+    ] {
+        let mut view = TranscriptView::default();
         render(&mut view, &cells, /*width*/ 20, /*height*/ 1);
         for event in [
             mouse(MouseEventKind::Down(MouseButton::Left), /*column*/ 0),
@@ -41,71 +44,78 @@ fn copy_on_select_waits_for_release_and_retains_selection() {
             ));
         }
         let release = mouse(MouseEventKind::Up(MouseButton::Left), /*column*/ 8);
-        let copied = match view.handle_mouse(release, &cells) {
-            Some(ViewAction::CopyOnSelect(text)) => Some(text),
-            Some(ViewAction::Changed) => None,
-            _ => panic!("release must finish the selection"),
-        };
-        assert_eq!(copied.as_deref(), enabled.then_some("selected"));
+        assert!(matches!(
+            view.handle_mouse(release, &cells),
+            Some(ViewAction::Changed)
+        ));
         assert_eq!(view.selected_text(&cells).as_deref(), Some("selected"));
         assert!(view.handle_mouse(release, &cells).is_none());
         assert!(!view.tick_selection(&cells));
-        if let Some(copied) = copied {
-            let buffer = render(&mut view, &cells, /*width*/ 20, /*height*/ 1);
-            let highlight = (0..20)
-                .map(|column| {
-                    if buffer[(column, 0)]
-                        .modifier
-                        .contains(ratatui::style::Modifier::REVERSED)
-                    {
-                        '^'
-                    } else {
-                        '·'
-                    }
-                })
-                .collect::<String>();
-            insta::assert_snapshot!(
-                format!("{}\n{highlight}", text(&buffer)),
-                @"
+        let buffer = render(&mut view, &cells, /*width*/ 20, /*height*/ 1);
+        let highlight = (0..20)
+            .map(|column| {
+                if buffer[(column, 0)]
+                    .modifier
+                    .contains(ratatui::style::Modifier::REVERSED)
+                {
+                    '^'
+                } else {
+                    '·'
+                }
+            })
+            .collect::<String>();
+        insta::allow_duplicates! {
+        insta::assert_snapshot!(
+            format!("{}\n{highlight}", text(&buffer)),
+            @"
                 selected text
                 ^^^^^^^^············
                 "
-            );
-            for result in [
-                Ok(CopyStatus::Confirmed),
-                Ok(CopyStatus::Unconfirmed),
-                Err("clipboard unavailable".to_owned()),
-            ] {
-                view.copy_selected_text_with(
-                    &cells,
-                    &copied,
-                    /*clear_selection*/ false,
-                    |_, _format| Ok(CopyStatus::Pending(1)),
-                )
-                .unwrap();
-                assert_eq!(
-                    view.finish_copy(&cells, &(1, result.clone()), /*current*/ true),
-                    Some(false)
-                );
-                assert_eq!(view.selected_text(&cells).as_deref(), Some(copied.as_str()));
-                assert_eq!(
-                    view.copy_feedback
-                        .as_ref()
-                        .map(|feedback| (feedback.result, feedback.characters)),
-                    Some((result.map_err(|_| ()), copied.chars().count()))
-                );
-            }
+        );
         }
+        assert!(view.copy_feedback.is_none());
+        assert!(
+            view.handle_mouse(
+                mouse(MouseEventKind::Down(MouseButton::Right), /*column*/ 3),
+                &cells
+            )
+            .is_none()
+        );
+        let Some(ViewAction::Copy(copied)) = view.handle_key(
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            &cells,
+        ) else {
+            panic!("Ctrl+C must request the selected text");
+        };
+        assert_eq!(copied, "selected");
+        view.copy_selected_text_with(
+            &cells,
+            &copied,
+            /*clear_selection*/ true,
+            |_, _format| Ok(CopyStatus::Pending(1)),
+        )
+        .unwrap();
+        assert_eq!(
+            view.finish_copy(&cells, &(1, result.clone()), /*current*/ true),
+            Some(())
+        );
+        assert_eq!(
+            view.selected_text(&cells).as_deref(),
+            (result != Ok(CopyStatus::Confirmed)).then_some(copied.as_str())
+        );
+        assert_eq!(
+            view.copy_feedback
+                .as_ref()
+                .map(|feedback| (feedback.result, feedback.characters)),
+            Some((result.map_err(|_| ()), copied.chars().count()))
+        );
     }
 }
 
 #[test]
-fn copy_on_select_copies_word_and_line_on_release_without_dragging() {
+fn repeated_clicks_select_word_and_line_for_explicit_copy() {
     let cells = vec![cell("alpha beta gamma")];
-    let mut view = TranscriptView {
-        copy_on_select: true,
-        ..Default::default()
-    };
+    let mut view = TranscriptView::default();
     render(&mut view, &cells, /*width*/ 24, /*height*/ 1);
     let down = mouse(MouseEventKind::Down(MouseButton::Left), /*column*/ 7);
     let up = MouseEvent {
@@ -120,30 +130,31 @@ fn copy_on_select_copies_word_and_line_on_release_without_dragging() {
             view.handle_mouse(down, &cells),
             Some(ViewAction::Changed)
         ));
-        let copied = match view.handle_mouse(up, &cells) {
-            Some(ViewAction::CopyOnSelect(text)) => Some(text),
-            Some(ViewAction::Changed) => None,
-            _ => panic!("release must finish the repeated click"),
-        };
-        assert_eq!(
-            (copied.as_deref(), view.selected_text(&cells).as_deref()),
-            (expected, expected)
-        );
+        assert!(matches!(
+            view.handle_mouse(up, &cells),
+            Some(ViewAction::Changed)
+        ));
+        assert_eq!(view.selected_text(&cells).as_deref(), expected);
+        match view.handle_key(
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            &cells,
+        ) {
+            Some(ViewAction::Copy(text)) => assert_eq!(Some(text.as_str()), expected),
+            None | Some(ViewAction::Changed) => assert_eq!(expected, None),
+            _ => panic!("Ctrl+C must copy a nonempty selection"),
+        }
         assert!(view.handle_mouse(up, &cells).is_none());
     }
 }
 
 #[test]
-fn copy_on_select_preserves_link_activation_and_ignores_empty_drags() {
+fn stationary_link_clicks_open_while_drags_select_link_text() {
     let cells: Vec<Arc<dyn HistoryCell>> = vec![Arc::new(AgentMarkdownCell::new(
         "[example.com](https://example.com/docs)".into(),
         std::path::Path::new("/"),
     ))];
     for (drag, release) in [(None, 2), (Some(5), 5), (Some(5), 2)] {
-        let mut view = TranscriptView {
-            copy_on_select: true,
-            ..Default::default()
-        };
+        let mut view = TranscriptView::default();
         render(&mut view, &cells, /*width*/ 30, /*height*/ 1);
         let down = mouse(MouseEventKind::Down(MouseButton::Left), /*column*/ 2);
         assert!(matches!(
@@ -168,14 +179,16 @@ fn copy_on_select_preserves_link_activation_and_ignores_empty_drags() {
                 assert_eq!(url, "https://example.com/docs");
                 assert_eq!(view.selected_text(&cells), None);
             }
-            (Some(_), 5, Some(ViewAction::CopyOnSelect(copied))) => {
-                assert_eq!(copied, "exa");
+            (Some(_), 5, Some(ViewAction::Changed)) => {
                 assert_eq!(view.selected_text(&cells).as_deref(), Some("exa"));
+                assert!(
+                    matches!(view.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL), &cells), Some(ViewAction::Copy(text)) if text == "exa")
+                );
             }
             (Some(_), 2, Some(ViewAction::Changed)) => {
                 assert_eq!(view.selected_text(&cells), None);
             }
-            _ => panic!("only a nonempty link drag should copy"),
+            _ => panic!("only a stationary link click should open the link"),
         }
     }
 }
