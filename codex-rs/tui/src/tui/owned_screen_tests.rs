@@ -33,6 +33,16 @@ fn owned_screen_preserves_inline_viewport_across_overlay_handoff_and_resume() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+    for mode in [1000, 1002, 1003, 1006] {
+        let enable = format!("\x1b[?{mode}h");
+        assert!(
+            !output
+                .stdout
+                .windows(enable.len())
+                .any(|bytes| bytes == enable.as_bytes()),
+            "screen lifecycle enabled mouse reporting mode {mode}",
+        );
+    }
     let mut terminal = vt100::Parser::new(
         /*rows*/ 24, /*cols*/ 80, /*scrollback_len*/ 0,
     );
@@ -127,7 +137,7 @@ async fn owned_screen_lifecycle_child() {
             &mut tui.terminal,
             Size::new(/*width*/ 80, /*height*/ 24),
             /*owned*/ false,
-            tui.overlay_input.captures_mouse(/*owned_screen*/ false),
+            /*capture_mouse*/ false,
         )
         .expect("resume static pager");
     pager
@@ -177,7 +187,7 @@ async fn owned_screen_lifecycle_child() {
             &mut tui.terminal,
             resumed,
             /*owned*/ true,
-            /*capture_mouse*/ true,
+            /*capture_mouse*/ false,
         )
         .expect("resume owned screen");
     assert_eq!(

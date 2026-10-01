@@ -128,6 +128,24 @@ loadable for compatibility but is deliberately not used by this build.
 Regressions live in `transcript_view/manual_copy_tests.rs`,
 `transcript_view/copy_delivery_tests.rs`, and the composer/owned-transcript tests.
 
+The user's main view uses terminal-owned history and selection through
+`tui.fullscreen_transcript = false` in `$CODEX_HOME/config.toml`, alongside
+`tui.copy_on_select = "never"` and `tui.right_click_paste = "off"`.
+Preserve these preferences during upgrades;
+do not force fullscreen ownership when starting or resuming a chat. Ctrl+T
+remains a keyboard-operated viewer and keeps the explicit-copy-only policy.
+
+Pointer input belongs to the terminal in this custom build, including composer,
+transcript, usage, onboarding, and session-preview screens. Production terminal
+setup must disable mouse reporting, and screen/overlay/editor/suspend transitions
+must not re-enable it. `tui/event_stream.rs` drops residual/native mouse records
+before any UI receives them, so clicking cannot reposition the typing cursor or
+trigger Codex selection, links, or right-click paste. Preserve bracketed paste,
+keyboard enhancement, and Ctrl+V image handling. Regression coverage includes
+the rendered `terminal_owned_mouse_keyboard_cursor` snapshot and the isolated
+owned-screen lifecycle test. Mouse support inside upstream widgets is retained
+but intentionally unreachable from the production event stream.
+
 ## Textarea wrapping
 
 Codex v0.153's upstream textarea wrapper supersedes the local v0.147 line-wrap
@@ -136,7 +154,7 @@ rely on upstream `wrapping::wrapped_lines` so future wrapping fixes continue to
 arrive with normal upgrades.
 
 Activity preview rows must not expand on mouse clicks. Preserve ordinary text
-selection and the advertised Ctrl+T full-transcript shortcut; its input and
+terminal-owned selection and the advertised Ctrl+T full-transcript shortcut; its input and
 rendering regression lives in `app/owned_transcript_input_tests.rs`.
 
 ## Files deliberately not ported

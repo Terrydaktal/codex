@@ -25,6 +25,7 @@
     "codex-rs/tui/src/app/snapshots/codex_tui__app__owned_transcript__tests__fullscreen_composer_explicit_copy.snap",
     "codex-rs/tui/src/transcript_view/manual_copy_tests.rs",
     "codex-rs/tui/src/transcript_view/copy_delivery_tests.rs",
+    "codex-rs/tui/src/tui/snapshots/codex_tui__tui__event_stream__tests__terminal_owned_mouse_keyboard_cursor.snap",
     "codex-rs/tui/src/transcript_view/snapshots/codex_tui__transcript_view__input__copy_delivery_tests__ctrl_c_retains_selection_until_confirmed_and_preserves_reading_position.snap",
     "codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__task_usage__tests__task_usage_lines_show_colored_task_summary.snap",
     "codex-rs/tui/src/chatwidget/task_usage.rs",
