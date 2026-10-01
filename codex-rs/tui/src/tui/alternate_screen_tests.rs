@@ -15,50 +15,36 @@ struct KeyboardScreens {
 }
 
 #[test]
-fn refreshed_mouse_policy_applies_to_fullscreen_and_overlays() {
+fn terminal_owned_pointer_input_survives_overlay_transitions() {
     use super::super::OverlayInput;
 
-    for owned in [false, true] {
+    for disabled in [true, false, true] {
         let screen = AlternateScreen::default();
         let mut output = Vec::new();
         let mut terminal = vt100::Parser::new(
             /*rows*/ 24, /*cols*/ 80, /*scrollback_len*/ 0,
         );
         let mut input = OverlayInput::Default;
+        screen.enter(&mut output, /*capture_mouse*/ false).unwrap();
         screen
-            .enter(&mut output, input.captures_mouse(owned))
-            .unwrap();
-        for disabled in [true, false, true] {
-            screen
-                .mouse_capture_disabled
-                .store(disabled, Ordering::Relaxed);
-            for next in [
-                OverlayInput::Transcript,
-                OverlayInput::Usage,
-                OverlayInput::Onboarding,
-                OverlayInput::Default,
-                OverlayInput::StaticPager,
-            ] {
-                input.apply(&screen, &mut output, next, owned).unwrap();
-                terminal.process(&std::mem::take(&mut output));
-                let capture = match next {
-                    OverlayInput::Default => owned,
-                    OverlayInput::Transcript | OverlayInput::Usage => true,
-                    OverlayInput::StaticPager | OverlayInput::Onboarding => false,
-                };
-                let expected = if !disabled && capture {
-                    vt100::MouseProtocolMode::AnyMotion
-                } else {
-                    vt100::MouseProtocolMode::None
-                };
-                assert_eq!(
-                    (
-                        terminal.screen().alternate_screen(),
-                        terminal.screen().mouse_protocol_mode()
-                    ),
-                    (true, expected),
-                );
-            }
+            .mouse_capture_disabled
+            .store(disabled, Ordering::Relaxed);
+        for next in [
+            OverlayInput::Transcript,
+            OverlayInput::Usage,
+            OverlayInput::Onboarding,
+            OverlayInput::Default,
+            OverlayInput::StaticPager,
+        ] {
+            input.apply(&screen, &mut output, next).unwrap();
+            terminal.process(&std::mem::take(&mut output));
+            assert_eq!(
+                (
+                    terminal.screen().alternate_screen(),
+                    terminal.screen().mouse_protocol_mode()
+                ),
+                (true, vt100::MouseProtocolMode::None),
+            );
         }
         screen.leave(&mut output).unwrap();
     }
@@ -420,7 +406,7 @@ fn failed_mouse_cleanup_still_leaves_owned_screen_and_remains_retryable() {
 
 #[cfg(not(windows))]
 #[test]
-fn pager_capture_restores_picker_input_without_a_screen_transition() {
+fn keyboard_only_pagers_restore_picker_input_without_a_screen_transition() {
     let screen = AlternateScreen::default();
     let mut output = Vec::new();
     let mut terminal = vt100::Parser::new(
@@ -438,16 +424,7 @@ fn pager_capture_restores_picker_input_without_a_screen_transition() {
         super::super::OverlayInput::StaticPager,
         super::super::OverlayInput::Usage,
     ] {
-        input
-            .apply(&screen, &mut output, requested, /*owned*/ false)
-            .unwrap();
-        let capture = requested != super::super::OverlayInput::StaticPager;
-        assert_eq!(
-            output
-                .windows(b"\x1b[?1003h".len())
-                .any(|bytes| bytes == b"\x1b[?1003h"),
-            capture
-        );
+        input.apply(&screen, &mut output, requested).unwrap();
         terminal.process(&std::mem::take(&mut output));
         assert_eq!(
             (
@@ -457,25 +434,12 @@ fn pager_capture_restores_picker_input_without_a_screen_transition() {
             ),
             (
                 true,
-                if capture {
-                    vt100::MouseProtocolMode::AnyMotion
-                } else {
-                    vt100::MouseProtocolMode::None
-                },
-                if capture {
-                    vt100::MouseProtocolEncoding::Sgr
-                } else {
-                    vt100::MouseProtocolEncoding::Default
-                }
+                vt100::MouseProtocolMode::None,
+                vt100::MouseProtocolEncoding::Default,
             ),
         );
         input
-            .apply(
-                &screen,
-                &mut output,
-                super::super::OverlayInput::Default,
-                /*owned*/ false,
-            )
+            .apply(&screen, &mut output, super::super::OverlayInput::Default)
             .unwrap();
         terminal.process(&std::mem::take(&mut output));
         assert_eq!(
@@ -488,7 +452,7 @@ fn pager_capture_restores_picker_input_without_a_screen_transition() {
 
 #[cfg(not(windows))]
 #[test]
-fn failed_pager_capture_setup_restores_requested_and_actual_picker_policy() {
+fn failed_pager_input_setup_restores_requested_and_actual_picker_policy() {
     for requested in [
         super::super::OverlayInput::Transcript,
         super::super::OverlayInput::Usage,
@@ -498,13 +462,11 @@ fn failed_pager_capture_setup_restores_requested_and_actual_picker_policy() {
         enter_with_mouse_enabled(&screen, &mut output, /*capture_mouse*/ false).unwrap();
         let mut writer = FailOnce {
             output,
-            sequence: b"\x1b[?1000h\x1b[?1002h\x1b[?1003h",
+            sequence: b"\x1b[?1007h",
             failed: false,
         };
         let mut input = super::super::OverlayInput::Default;
-        let error = input
-            .apply(&screen, &mut writer, requested, /*owned*/ false)
-            .unwrap_err();
+        let error = input.apply(&screen, &mut writer, requested).unwrap_err();
         assert_eq!(error.to_string(), "injected cleanup write failure");
         assert!(input == super::super::OverlayInput::Default);
         assert!(writer.failed);
@@ -535,14 +497,11 @@ fn identical_default_request_retries_after_failed_fallback_cleanup() {
     }
     impl Write for PartialFailure {
         fn write(&mut self, bytes: &[u8]) -> Result<usize> {
-            if bytes == b"\x1b[?1000h\x1b[?1002h\x1b[?1003h" && !self.failed_setup {
-                self.output.extend_from_slice(b"\x1b[?1000h\x1b[?1002h");
+            if bytes == b"\x1b[?1007h" && !self.failed_setup {
                 self.failed_setup = true;
                 return Err(std::io::Error::other("partial setup"));
             }
-            if bytes == b"\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l"
-                && !self.failed_cleanup
-            {
+            if bytes == b"\x1b[?1007h" && !self.failed_cleanup {
                 self.failed_cleanup = true;
                 return Err(std::io::Error::other("partial cleanup"));
             }
@@ -554,30 +513,21 @@ fn identical_default_request_retries_after_failed_fallback_cleanup() {
         }
     }
     let screen = AlternateScreen::default();
+    let mut output = Vec::new();
+    enter_with_mouse_enabled(&screen, &mut output, /*capture_mouse*/ false).unwrap();
     let mut writer = PartialFailure {
-        output: Vec::new(),
+        output,
         failed_setup: false,
         failed_cleanup: false,
     };
-    enter_with_mouse_enabled(&screen, &mut writer, /*capture_mouse*/ false).unwrap();
     let mut input = super::super::OverlayInput::Default;
-    let result = input.apply(
-        &screen,
-        &mut writer,
-        super::super::OverlayInput::Transcript,
-        /*owned*/ false,
-    );
+    let result = input.apply(&screen, &mut writer, super::super::OverlayInput::Transcript);
     assert_eq!(result.unwrap_err().to_string(), "partial setup");
     assert!(input == super::super::OverlayInput::Default);
-    assert!(screen.mouse_active.load(Ordering::Relaxed));
+    assert!(!screen.mouse_active.load(Ordering::Relaxed));
     assert!(!screen.input_configured.load(Ordering::Relaxed));
     input
-        .apply(
-            &screen,
-            &mut writer,
-            super::super::OverlayInput::Default,
-            /*owned*/ false,
-        )
+        .apply(&screen, &mut writer, super::super::OverlayInput::Default)
         .unwrap();
     assert!(!screen.mouse_active.load(Ordering::Relaxed));
     assert!(screen.input_configured.load(Ordering::Relaxed));

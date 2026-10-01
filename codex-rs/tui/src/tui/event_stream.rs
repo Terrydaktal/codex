@@ -263,7 +263,7 @@ impl<S: EventSource + Default + Unpin> TuiEventStream<S> {
         }
     }
 
-    /// Map a crossterm event to a [`TuiEvent`], preserving mouse coordinates and modifiers.
+    /// Keep pointer input terminal-owned while forwarding keyboard, paste and lifecycle events.
     fn map_crossterm_event(&mut self, event: Event) -> Option<TuiEvent> {
         match event {
             Event::Key(key_event) => {
@@ -301,7 +301,9 @@ impl<S: EventSource + Default + Unpin> TuiEventStream<S> {
                 self.terminal_focused.store(false, Ordering::Relaxed);
                 Some(TuiEvent::FocusLost)
             }
-            Event::Mouse(mouse) => Some(TuiEvent::Mouse(mouse)),
+            // Windows can supply native mouse records, and queued reports may outlive capture.
+            // Neither may move the composer cursor or invoke application-owned mouse actions.
+            Event::Mouse(_) => None,
         }
     }
 }
@@ -437,7 +439,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn mouse_events_preserve_coordinates_and_do_not_consume_the_next_key() {
+    async fn keyboard_input_survives_queued_terminal_mouse_reports() {
         let (broker, handle, _draw_tx, draw_rx, terminal_focused) = setup();
         let mut stream = make_stream(broker, draw_rx, terminal_focused);
         let expected = MouseEvent {
@@ -447,16 +449,99 @@ mod tests {
             modifiers: KeyModifiers::SHIFT,
         };
         handle.send(Ok(Event::Mouse(expected)));
-        match stream.next().await {
-            Some(TuiEvent::Mouse(actual)) => assert_eq!(actual, expected),
-            other => panic!("expected mouse event, got {other:?}"),
-        }
         let expected = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
         handle.send(Ok(Event::Key(expected)));
         match stream.next().await {
             Some(TuiEvent::Key(actual)) => assert_eq!(actual, expected),
             other => panic!("expected key event, got {other:?}"),
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn terminal_owned_mouse_keeps_editing_at_the_keyboard_cursor() {
+        use crate::bottom_pane::TextArea;
+        use crate::bottom_pane::TextAreaState;
+        use crossterm::event::MouseButton;
+        use ratatui::widgets::StatefulWidgetRef;
+
+        let (broker, handle, _draw_tx, draw_rx, terminal_focused) = setup();
+        let mut stream = make_stream(broker, draw_rx, terminal_focused);
+        let mut textarea = TextArea::new();
+        textarea.insert_str("existing draft");
+        let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(
+            /*width*/ 32, /*height*/ 3,
+        ))
+        .unwrap();
+        let mut state = TextAreaState::default();
+        terminal
+            .draw(|frame| {
+                StatefulWidgetRef::render_ref(
+                    &(&textarea),
+                    frame.area(),
+                    frame.buffer_mut(),
+                    &mut state,
+                );
+            })
+            .unwrap();
+
+        for kind in [
+            MouseEventKind::Down(MouseButton::Left),
+            MouseEventKind::Drag(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),
+            MouseEventKind::Down(MouseButton::Right),
+            MouseEventKind::Down(MouseButton::Middle),
+            MouseEventKind::ScrollUp,
+            MouseEventKind::Moved,
+        ] {
+            handle.send(Ok(Event::Mouse(MouseEvent {
+                kind,
+                column: 1,
+                row: 0,
+                modifiers: KeyModifiers::NONE,
+            })));
+        }
+        handle.send(Ok(Event::Key(KeyEvent::new(
+            KeyCode::Left,
+            KeyModifiers::NONE,
+        ))));
+        handle.send(Ok(Event::Paste("!".to_string())));
+        handle.send(Ok(Event::Key(KeyEvent::new(
+            KeyCode::Char('?'),
+            KeyModifiers::NONE,
+        ))));
+        for _ in 0..3 {
+            match timeout(Duration::from_secs(1), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                TuiEvent::Key(key) => textarea.input(key),
+                TuiEvent::Paste(text) => textarea.insert_str(&text),
+                other => panic!("expected keyboard or paste input, got {other:?}"),
+            }
+        }
+        assert_eq!(
+            (textarea.text(), textarea.cursor()),
+            ("existing draf!?t", 15)
+        );
+        terminal
+            .draw(|frame| {
+                StatefulWidgetRef::render_ref(
+                    &(&textarea),
+                    frame.area(),
+                    frame.buffer_mut(),
+                    &mut state,
+                );
+            })
+            .unwrap();
+        insta::assert_snapshot!(
+            "terminal_owned_mouse_keyboard_cursor",
+            format!(
+                "cursor: {:?}\n{}",
+                textarea.cursor_pos(terminal.backend().buffer().area),
+                terminal.backend()
+            ),
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

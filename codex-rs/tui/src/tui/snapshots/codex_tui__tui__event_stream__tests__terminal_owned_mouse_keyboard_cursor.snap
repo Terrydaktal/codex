@@ -1,0 +1,8 @@
+---
+source: tui/src/tui/event_stream.rs
+expression: "format!(\"cursor: {:?}\\n{}\",\ntextarea.cursor_pos(terminal.backend().buffer().area), terminal.backend())"
+---
+cursor: Some((15, 0))
+"existing draf!?t                "
+"                                "
+"                                "

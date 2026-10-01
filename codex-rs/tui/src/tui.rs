@@ -19,6 +19,7 @@ use crossterm::SynchronizedUpdate;
 use crossterm::cursor::SetCursorStyle;
 use crossterm::event::DisableBracketedPaste;
 use crossterm::event::DisableFocusChange;
+use crossterm::event::DisableMouseCapture;
 use crossterm::event::EnableBracketedPaste;
 #[cfg(not(windows))]
 use crossterm::event::EnableFocusChange;
@@ -242,7 +243,8 @@ mod tests {
 pub fn set_modes() -> Result<()> {
     ensure_virtual_terminal_processing()?;
 
-    execute!(stdout(), EnableBracketedPaste)?;
+    // Keep selection and pointer input with the terminal, including after an unclean exit.
+    execute!(stdout(), DisableMouseCapture, EnableBracketedPaste)?;
 
     enable_raw_mode()?;
     #[cfg(windows)]
@@ -610,7 +612,8 @@ pub enum TuiEvent {
     Key(KeyEvent),
     /// A bracketed paste payload normalized by the app layer before it reaches the composer.
     Paste(String),
-    /// A terminal mouse event for pointer interactions.
+    /// Retained for upstream widget internals; production input leaves the mouse terminal-owned.
+    #[cfg_attr(not(test), allow(dead_code))]
     Mouse(MouseEvent),
     /// A terminal size notification and its reported dimensions.
     ///
@@ -630,7 +633,7 @@ pub enum TuiEvent {
     FocusLost,
 }
 
-/// The current screen's pointer policy; ordinary pickers retain alternate-scroll input.
+/// The active overlay, retained across editor and suspend handoffs.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) enum OverlayInput {
     #[default]
@@ -639,16 +642,6 @@ pub(crate) enum OverlayInput {
     Transcript,
     StaticPager,
     Usage,
-}
-
-impl OverlayInput {
-    fn captures_mouse(self, owned_screen: bool) -> bool {
-        match self {
-            Self::Default => owned_screen,
-            Self::Onboarding | Self::StaticPager => false,
-            Self::Transcript | Self::Usage => true,
-        }
-    }
 }
 
 pub struct Tui {
@@ -789,7 +782,7 @@ impl Tui {
             self.owned_screen = true;
             if self.is_alt_screen_active() {
                 ALTERNATE_SCREEN
-                    .configure_input(self.terminal.backend_mut(), /*capture_mouse*/ true)
+                    .configure_input(self.terminal.backend_mut(), /*capture_mouse*/ false)
             } else {
                 self.enter_alt_screen()
             }
@@ -819,12 +812,8 @@ impl Tui {
     /// Actual terminal capture is tracked by AlternateScreen so partial writes remain cleanable.
     pub(crate) fn set_overlay_input(&mut self, input: OverlayInput) -> Result<()> {
         if self.alt_screen_enabled && self.is_alt_screen_active() {
-            self.overlay_input.apply(
-                &ALTERNATE_SCREEN,
-                self.terminal.backend_mut(),
-                input,
-                self.owned_screen,
-            )
+            self.overlay_input
+                .apply(&ALTERNATE_SCREEN, self.terminal.backend_mut(), input)
         } else {
             self.overlay_input = input;
             Ok(())
@@ -1070,10 +1059,8 @@ impl Tui {
             self.terminal.hide_cursor()?;
             self.terminal.clear()?;
         }
-        let result = ALTERNATE_SCREEN.enter(
-            self.terminal.backend_mut(),
-            self.overlay_input.captures_mouse(self.owned_screen),
-        );
+        let result =
+            ALTERNATE_SCREEN.enter(self.terminal.backend_mut(), /*capture_mouse*/ false);
         self.alt_screen_active
             .store(ALTERNATE_SCREEN.is_active(), Ordering::Relaxed);
         if !self.is_alt_screen_active() {
@@ -1289,7 +1276,7 @@ impl Tui {
                     &mut self.terminal,
                     screen_size,
                     self.owned_screen,
-                    self.overlay_input.captures_mouse(self.owned_screen),
+                    /*capture_mouse*/ false,
                 )?;
             }
 
@@ -1440,7 +1427,7 @@ impl Tui {
                     &mut self.terminal,
                     screen_size,
                     self.owned_screen,
-                    self.overlay_input.captures_mouse(self.owned_screen),
+                    /*capture_mouse*/ false,
                 )?;
             }
 

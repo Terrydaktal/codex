@@ -1,9 +1,8 @@
 //! Pair alternate-screen transitions with that screen's independent keyboard-mode stack.
 //!
 //! Push only on entry and pop before leaving or yielding input to an editor. The main screen
-//! keeps its own TUI mode until the handoff returns to it. Transcript surfaces retain pointer
-//! reporting across overlays and disable it before yielding. Promoting an overlay must not push
-//! another keyboard frame. Refresh tmux's input policy on entry for mouse-capture requests.
+//! keeps its own TUI mode until the handoff returns to it. All production screens leave pointer
+//! input with the terminal. Promoting an overlay must not push another keyboard frame.
 
 use std::io::Result;
 use std::io::Write;
@@ -221,21 +220,20 @@ impl AlternateScreen {
 
 impl super::OverlayInput {
     /// Roll back a partial overlay setup immediately; callers still receive the original error.
-    /// The fallback keeps capture when the session owns the screen, otherwise restores the picker.
+    /// Both the requested overlay and fallback retain terminal-owned pointer input.
     pub(super) fn apply(
         &mut self,
         screen: &AlternateScreen,
         writer: &mut impl Write,
         next: Self,
-        owned: bool,
     ) -> Result<()> {
         if *self == next && screen.input_configured.load(Ordering::Relaxed) {
             return Ok(());
         }
         *self = next;
-        if let Err(error) = screen.configure_input(writer, next.captures_mouse(owned)) {
+        if let Err(error) = screen.configure_input(writer, /*capture_mouse*/ false) {
             *self = Self::Default;
-            let _ = screen.configure_input(writer, owned);
+            let _ = screen.configure_input(writer, /*capture_mouse*/ false);
             return Err(error);
         }
         Ok(())
