@@ -3168,7 +3168,7 @@ async fn terminal_title_thread_usage_fetches_and_renders_without_status_line() {
 
     assert_eq!(
         chat.last_terminal_title,
-        Some("5.2 credits | ~$0.21".to_string())
+        Some("5.2 credits - ~$0.21".to_string())
     );
     assert_eq!(status_line_text(&chat), None);
     assert!(rx.try_recv().is_err(), "title-only refresh must not poll");

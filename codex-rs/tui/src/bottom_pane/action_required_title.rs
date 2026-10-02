@@ -21,5 +21,5 @@ where
             parts.push(value);
         }
     }
-    parts.join(" | ")
+    parts.join(" - ")
 }

@@ -5,6 +5,47 @@ use crate::bottom_pane::goal_status_indicator_line;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
+async fn terminal_title_uses_hyphens_and_keeps_activity_next_to_the_directory() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.local_settings.tui.terminal_title = Some(
+        ["app-name", "activity", "current-dir", "thread-title"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+    );
+    chat.thread_name = Some("Check ChatGPT link access".to_string());
+    let cwd = chat
+        .terminal_title_value_for_item(TerminalTitleItem::CurrentDir, Instant::now())
+        .expect("current directory");
+
+    chat.refresh_terminal_title();
+    assert_eq!(
+        chat.last_terminal_title,
+        Some(format!("codex - {cwd} - Check ChatGPT link access"))
+    );
+
+    chat.bottom_pane.set_task_running(/*running*/ true);
+    chat.refresh_terminal_title();
+    let spinner = chat
+        .last_terminal_title
+        .as_deref()
+        .expect("working title")
+        .chars()
+        .find(|ch| ('\u{2800}'..='\u{28ff}').contains(ch))
+        .expect("activity spinner");
+    assert_eq!(
+        chat.last_terminal_title,
+        Some(format!("codex {spinner} {cwd} - Check ChatGPT link access"))
+    );
+
+    chat.bottom_pane.set_task_running(/*running*/ false);
+    chat.thread_name = None;
+    chat.thread_id = None;
+    chat.refresh_terminal_title();
+    assert_eq!(chat.last_terminal_title, Some(format!("codex - {cwd}")));
+}
+
+#[tokio::test]
 async fn goal_clock_refresh_redraws_only_when_elapsed_label_changes() {
     let (frame_requester, mut draw_rx) = FrameRequester::test_channel();
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual_with_auth(
@@ -111,7 +152,7 @@ async fn terminal_title_shows_action_required_while_exec_approval_is_pending() {
 
     assert_eq!(
         chat.last_terminal_title,
-        Some("[ ! ] Action Required | project".to_string())
+        Some("[ ! ] Action Required - project".to_string())
     );
     assert!(!chat.should_animate_terminal_title_spinner());
 
@@ -203,14 +244,14 @@ async fn terminal_title_action_required_blinks_when_animations_are_enabled() {
 
     assert_eq!(
         chat.last_terminal_title,
-        Some("[ . ] Action Required | project".to_string())
+        Some("[ . ] Action Required - project".to_string())
     );
     assert!(chat.should_animate_terminal_title_action_required());
     chat.local_settings.tui.effects.title = false;
     chat.refresh_terminal_title();
     assert_eq!(
         chat.last_terminal_title,
-        Some("[ ! ] Action Required | project".into())
+        Some("[ ! ] Action Required - project".into())
     );
     assert!(!chat.should_animate_terminal_title_action_required());
 }
@@ -247,7 +288,7 @@ async fn terminal_title_activity_indicators_do_not_animate_when_animations_are_d
 
     assert_eq!(
         chat.last_terminal_title,
-        Some("[ ! ] Action Required | project".to_string())
+        Some("[ ! ] Action Required - project".to_string())
     );
     assert!(!chat.should_animate_terminal_title_action_required());
 }

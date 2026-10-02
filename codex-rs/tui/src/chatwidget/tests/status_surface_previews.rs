@@ -568,5 +568,5 @@ async fn terminal_title_preview_uses_title_truncation_for_live_values() {
     let truncated_branch =
         ChatWidget::truncate_terminal_title_part(long_branch.to_string(), /*max_chars*/ 32);
 
-    assert_eq!(preview, format!("{truncated_thread} | {truncated_branch}"));
+    assert_eq!(preview, format!("{truncated_thread} - {truncated_branch}"));
 }

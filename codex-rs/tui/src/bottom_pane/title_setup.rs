@@ -182,8 +182,8 @@ impl TerminalTitleItem {
     /// Returns the separator to place before this item in a rendered title.
     ///
     /// The activity indicator gets a plain space on either side so it reads as
-    /// `my-project <activity> Working` rather than `my-project | <activity> | Working`.
-    /// All other adjacent items are joined with ` | `.
+    /// `my-project <activity> Working` rather than `my-project - <activity> - Working`.
+    /// All other adjacent items are joined with ` - `.
     pub(crate) fn separator_from_previous(self, previous: Option<Self>) -> &'static str {
         match previous {
             None => "",
@@ -192,7 +192,7 @@ impl TerminalTitleItem {
             {
                 " "
             }
-            Some(_) => " | ",
+            Some(_) => " - ",
         }
     }
 }

@@ -413,7 +413,7 @@ async fn transient_zero_cost_preserves_fresh_credits_and_breakdowns() {
     );
     assert_eq!(
         chat.last_terminal_title,
-        Some("50 credits | ~$1.82".to_string())
+        Some("50 credits - ~$1.82".to_string())
     );
     assert!(chat.thread_usage.settlement_refresh_due_at.is_some());
 }
@@ -663,7 +663,7 @@ async fn billing_surfaces_render_for_every_supported_enterprise_plan() {
         );
         assert_eq!(
             chat.last_terminal_title,
-            Some("5.2 credits | ~$0.21".to_string())
+            Some("5.2 credits - ~$0.21".to_string())
         );
         assert!(rx.try_recv().is_err(), "billing surfaces share a request");
     }

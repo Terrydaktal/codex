@@ -16,5 +16,5 @@ expression: terminal_title_popup_snapshot(&mut chat)
   [ ] activity       Spinner while working, action-required message while blocked
   [ ] run-state      Compact session run-state text (Ready, Working, Thinking)
 ↓
-  preview-live-root | Live preview thread | feature/live-preview-branch | Tasks 2/5
+  preview-live-root - Live preview thread - feature/live-preview-branch - Tasks 2/5
   space toggle · ←/→ reorder · enter save · esc cancel
