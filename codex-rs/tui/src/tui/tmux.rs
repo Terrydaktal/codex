@@ -2,7 +2,11 @@
 //!
 //! Mouse capture is suppressed only when the containing session explicitly reports mouse off.
 //! Missing tmux or an inconclusive probe preserves the normal input policy.
+//! Prefer the user's explicit `~/.local/bin/tmux` installation (including symlinks),
+//! then trusted system locations. Never search ambient PATH or the working directory.
 
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
 
@@ -25,13 +29,45 @@ pub(super) fn options() -> Options {
     if std::env::var_os("TMUX").is_none() && pane.is_none() {
         return Options::default();
     }
-    let Some(executable) = codex_utils_path::system_executable("tmux") else {
+    options_for_installation(pane.as_deref(), dirs::home_dir().as_deref(), || {
+        codex_utils_path::system_executable("tmux")
+    })
+}
+
+fn options_for_installation(
+    pane: Option<&str>,
+    home: Option<&Path>,
+    system_executable: impl FnOnce() -> Option<PathBuf>,
+) -> Options {
+    // This tmux-only exception supports user-installed builds without relaxing
+    // automatic helper discovery globally. The selected installation may be a
+    // symlink to the user's build tree, as is customary for ~/.local/bin.
+    let user_executable = home.filter(|home| home.is_absolute()).and_then(|home| {
+        let executable = dunce::canonicalize(
+            home.join(".local/bin")
+                .join(format!("tmux{}", std::env::consts::EXE_SUFFIX)),
+        )
+        .ok()?;
+        let metadata = executable.metadata().ok()?;
+        if !metadata.is_file() {
+            return None;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if metadata.permissions().mode() & 0o111 == 0 {
+                return None;
+            }
+        }
+        Some(executable)
+    });
+    let Some(executable) = user_executable.or_else(system_executable) else {
         return Options::default();
     };
     let Ok(path) = codex_utils_path::system_path() else {
         return Options::default();
     };
-    read_options(pane.as_deref(), |args| {
+    read_options(pane, |args| {
         let output = Command::new(&executable)
             .env("PATH", &path)
             .args(args)
