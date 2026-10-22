@@ -273,6 +273,9 @@ async fn reconnect_restores_history_permissions_and_keeps_old_input_paused() -> 
             .unwrap()
             .creating_worktree = true;
         let old_sender = app.app_event_tx.clone();
+        let mut build_updates = old_sender.running_build_outdated.subscribe();
+        old_sender.running_build_outdated.send_replace(true);
+        assert!(*build_updates.borrow_and_update());
         let connected = reconnect(
             app.app_server_target.clone(),
             app.config.clone(),
@@ -290,6 +293,11 @@ async fn reconnect_restores_history_permissions_and_keeps_old_input_paused() -> 
         );
         app.finish_reconnect(&mut tui, &mut session, &mut events, connected, "2.1.0")
             .await?;
+        assert!(*app.app_event_tx.running_build_outdated.borrow());
+        // The window's monitor still owns the old sender after event-channel rotation.
+        old_sender.running_build_outdated.send_replace(false);
+        assert!(build_updates.has_changed()?);
+        assert!(!*app.app_event_tx.running_build_outdated.borrow());
         if edit_offline {
             assert!(!app.chat_widget.has_active_view());
             assert!(

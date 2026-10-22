@@ -5,6 +5,51 @@ use crate::bottom_pane::goal_status_indicator_line;
 use pretty_assertions::assert_eq;
 
 #[tokio::test]
+async fn outdated_running_build_title_preserves_dynamic_text_and_disabled_titles() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.local_settings.tui.terminal_title = Some(vec![
+        "app-name".into(),
+        "thread-title".into(),
+        "status".into(),
+    ]);
+    chat.thread_name = Some("codex project - Terminal".into());
+    chat.app_event_tx.running_build_outdated.send_replace(true);
+    chat.refresh_terminal_title();
+    assert_eq!(
+        chat.last_terminal_title.as_deref(),
+        Some("c̶o̶d̶e̶x̶ - codex project - Terminal - Ready")
+    );
+    let mut titles = vec![chat.last_terminal_title.clone().unwrap()];
+    chat.thread_name = Some("Changed thread".into());
+    chat.refresh_terminal_title();
+    let changed = chat.last_terminal_title.clone();
+    chat.refresh_terminal_title();
+    assert_eq!(chat.last_terminal_title, changed);
+    titles.push(changed.unwrap());
+    chat.local_settings.tui.terminal_title = Some(vec!["thread-title".into()]);
+    chat.refresh_terminal_title();
+    assert_eq!(
+        chat.last_terminal_title.as_deref(),
+        Some("Changed thread - c̶o̶d̶e̶x̶")
+    );
+    titles.push(chat.last_terminal_title.clone().unwrap());
+    chat.app_event_tx.running_build_outdated.send_replace(false);
+    chat.refresh_terminal_title();
+    assert_eq!(chat.last_terminal_title.as_deref(), Some("Changed thread"));
+    titles.push(chat.last_terminal_title.clone().unwrap());
+    chat.local_settings.tui.terminal_title = Some(Vec::new());
+    chat.app_event_tx.running_build_outdated.send_replace(true);
+    chat.refresh_terminal_title();
+    assert_eq!(chat.last_terminal_title, None);
+    insta::assert_snapshot!(titles.join("\n"), @r"
+    c̶o̶d̶e̶x̶ - codex project - Terminal - Ready
+    c̶o̶d̶e̶x̶ - Changed thread - Ready
+    Changed thread - c̶o̶d̶e̶x̶
+    Changed thread
+    ");
+}
+
+#[tokio::test]
 async fn terminal_title_uses_hyphens_and_keeps_activity_next_to_the_directory() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.local_settings.tui.terminal_title = Some(

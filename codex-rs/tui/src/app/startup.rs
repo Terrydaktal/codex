@@ -199,6 +199,10 @@ impl App {
         let startup_started_at = Instant::now();
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
         let app_event_tx = AppEventSender::new(app_event_tx);
+        #[cfg(target_os = "linux")]
+        let _running_build_monitor =
+            crate::running_build::start(app_event_tx.running_build_outdated.clone());
+        let mut running_build_updates = app_event_tx.running_build_outdated.subscribe();
         if let Some(message) = project_config_warning(&config) {
             app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
                 history_cell::StartupWarningsCell::new(vec![message]),
@@ -1228,6 +1232,10 @@ See the Codex keymap documentation for supported actions and examples."
                         }
                     }, if listen_for_app_server_events => {
                         app.refresh_rate_limits(&app_server, RateLimitRefreshOrigin::Periodic);
+                        AppRunControl::Continue
+                    }
+                    _ = running_build_updates.changed() => {
+                        app.chat_widget.refresh_terminal_title();
                         AppRunControl::Continue
                     }
                     () = async {

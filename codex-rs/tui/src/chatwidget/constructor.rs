@@ -34,7 +34,11 @@ impl ChatWidget {
             session_telemetry,
         } = common;
         // Keep asynchronous widget callbacks scoped separately from the app and other widgets.
-        let app_event_tx = AppEventSender::new(app_event_tx.app_event_tx);
+        let app_event_tx = AppEventSender {
+            voice_only: Arc::default(),
+            // Build identity belongs to the window, not the newly scoped voice/widget owner.
+            ..app_event_tx
+        };
         let model = model.filter(|m| !m.trim().is_empty());
         let mut config = config;
         config.model = model.clone();

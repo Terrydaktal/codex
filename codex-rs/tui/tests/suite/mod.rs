@@ -8,6 +8,8 @@ mod focus_palette;
 #[cfg(unix)]
 mod reconnect;
 mod resize_reflow;
+#[cfg(target_os = "linux")]
+mod running_build;
 #[cfg(unix)]
 mod screen_reader;
 mod status_indicator;

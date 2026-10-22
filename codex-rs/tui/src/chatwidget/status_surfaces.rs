@@ -266,7 +266,18 @@ impl ChatWidget {
             return;
         }
 
-        let title = self.terminal_title_text_for_selections(selections, now);
+        let mut title = self.terminal_title_text_for_selections(selections, now);
+        if *self.app_event_tx.running_build_outdated.borrow()
+            && !selections
+                .terminal_title_items
+                .contains(&TerminalTitleItem::AppName)
+        {
+            let label = crate::running_build::app_label(/*outdated*/ true);
+            title = Some(match title {
+                Some(title) => format!("{title} - {label}"),
+                None => label.to_string(),
+            });
+        }
         if self.last_terminal_title == title {
             return;
         }
@@ -886,7 +897,10 @@ impl ChatWidget {
         now: Instant,
     ) -> Option<String> {
         match item {
-            TerminalTitleItem::AppName => Some("codex".to_string()),
+            TerminalTitleItem::AppName => Some(
+                crate::running_build::app_label(*self.app_event_tx.running_build_outdated.borrow())
+                    .to_string(),
+            ),
             TerminalTitleItem::Project => self.terminal_title_project_name(),
             TerminalTitleItem::CurrentDir => Some(Self::truncate_terminal_title_part(
                 format_directory_display(self.status_line_cwd(), /*max_width*/ None),

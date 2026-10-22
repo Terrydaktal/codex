@@ -311,7 +311,7 @@ impl PtyCodex {
         )
     }
 
-    fn start_binary(
+    pub(super) fn start_binary(
         codex: &Path,
         repo_root: &Path,
         codex_home: TempDir,
@@ -355,6 +355,12 @@ impl PtyCodex {
         }
         let child = command
             .args(extra_args)
+            .env("RUST_LOG", "trace")
+            .arg("-c")
+            .arg(format!(
+                "log_dir={:?}",
+                codex_home.path().join("logs").display().to_string()
+            ))
             .arg("-C")
             .arg(repo_root)
             .env("TERM", "xterm-256color")
@@ -384,6 +390,23 @@ impl PtyCodex {
             keyboard_answered: false,
             _codex_home: codex_home,
         })
+    }
+
+    pub(super) fn last_window_title(&self) -> Option<&str> {
+        self.output
+            .windows(4)
+            .enumerate()
+            .rev()
+            .find_map(|(start, bytes)| {
+                if bytes != b"\x1b]0;" && bytes != b"\x1b]2;" {
+                    return None;
+                }
+                let rest = &self.output[start + 4..];
+                let end = rest
+                    .iter()
+                    .position(|byte| *byte == b'\x07' || *byte == b'\x1b')?;
+                std::str::from_utf8(&rest[..end]).ok()
+            })
     }
 
     pub(super) fn wait_for_startup(&mut self) -> Result<()> {
@@ -514,7 +537,10 @@ impl PtyCodex {
                 return Ok(());
             }
             if let Some(status) = self.child.try_wait()? {
-                bail!("Codex exited while waiting for {text:?} ({status})");
+                bail!(
+                    "Codex exited while waiting for {text:?} ({status}); screen:\n{}",
+                    self.screen_contents()
+                );
             }
         }
         bail!("missing {text:?}; screen:\n{}", self.screen_contents())

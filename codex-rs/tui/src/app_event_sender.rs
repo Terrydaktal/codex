@@ -27,6 +27,7 @@ use crate::session_log;
 pub(crate) struct AppEventSender {
     pub app_event_tx: UnboundedSender<AppEvent>,
     pub(crate) voice_only: Arc<AtomicBool>,
+    pub(crate) running_build_outdated: tokio::sync::watch::Sender<bool>,
 }
 
 impl AppEventSender {
@@ -34,6 +35,7 @@ impl AppEventSender {
         Self {
             app_event_tx,
             voice_only: Arc::default(),
+            running_build_outdated: tokio::sync::watch::channel(/*init*/ false).0,
         }
     }
 

@@ -267,7 +267,9 @@ impl App {
         // Old request handles stay attached to the dead connection. Rotating the event channel
         // prevents their late completions from submitting follow-up operations on the new one.
         let (tx, rx) = mpsc::unbounded_channel();
-        self.app_event_tx = AppEventSender::new(tx);
+        let mut event_tx = AppEventSender::new(tx);
+        event_tx.running_build_outdated = self.app_event_tx.running_build_outdated.clone();
+        self.app_event_tx = event_tx;
         *app_event_rx = rx;
         {
             let mut state = self
