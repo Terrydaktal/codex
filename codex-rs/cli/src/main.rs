@@ -67,6 +67,8 @@ mod exec_server_telemetry;
 mod marketplace_cmd;
 mod mcp_cmd;
 mod mcp_login;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+mod memory_allocator;
 mod migrate_rollouts;
 mod plugin_cmd;
 mod queue_cmd;
@@ -1011,9 +1013,14 @@ fn stage_str(stage: Stage) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    memory_allocator::configure_before_threads();
     codex_build_info::initialize!();
     let remote_control_disabled = codex_app_server::take_remote_control_disabled_env();
     arg0_dispatch_or_else(move |arg0_paths: Arg0DispatchPaths| async move {
+        // Start only after arg0 dispatch: sandbox/exec helpers must not inherit a thread.
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        let _memory_reclaimer = memory_allocator::start();
         // Keep the CLI dispatcher off the runtime's stack while the TUI rebuilds a thread.
         Box::pin(cli_main(arg0_paths, remote_control_disabled)).await?;
         Ok(())
