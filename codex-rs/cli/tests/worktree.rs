@@ -138,11 +138,7 @@ async fn interactive_worktree_start_and_fork_bind_owner_before_turn() -> anyhow:
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[cfg_attr(
-    windows,
-    ignore = "requires a non-elevated terminal with daemon breakaway support"
-)]
-async fn daemon_worktree_start_and_fork_bind_owner_before_turn() -> anyhow::Result<()> {
+async fn configured_auto_start_worktree_and_fork_use_per_window_ownership() -> anyhow::Result<()> {
     worktree_start_and_fork("daemon").await
 }
 
@@ -526,11 +522,11 @@ trust_level = "trusted"
         if backend == "daemon" && !analytics && matches!(observed, Ok(Ok(_))) {
             session.writer_sender().send(b"/status\r".to_vec()).await?;
             tokio::time::timeout(Duration::from_secs(/*secs*/ 10), async {
-                while !output.contains("Local background server") {
+                while !output.contains("Model:") {
                     let bytes = stdout
                         .recv()
                         .await
-                        .context("TUI exited before daemon status")?;
+                        .context("TUI exited before per-window status")?;
                     output.push_str(&String::from_utf8_lossy(&bytes));
                     let replies = queries.feed(&bytes);
                     if !replies.is_empty() {
@@ -540,7 +536,9 @@ trust_level = "trusted"
                 Ok::<_, anyhow::Error>(())
             })
             .await
-            .with_context(|| format!("daemon status timed out: {output}"))??;
+            .with_context(|| format!("per-window status timed out: {output}"))??;
+            assert!(!output.contains("Local background server"), "{output}");
+            assert!(!home.join("app-server-daemon/daemon.pid").exists());
         }
         if analytics {
             tokio::time::timeout(Duration::from_secs(/*secs*/ 10), metric_rx.recv())

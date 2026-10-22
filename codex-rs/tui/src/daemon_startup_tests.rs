@@ -1,4 +1,4 @@
-//! Opportunistic attachment may fall back; automatic startup requires a shared server.
+//! Per-window launch defaults and compatibility retained for explicit shared-server launches.
 
 use super::*;
 use crate::legacy_core::config::ConfigBuilder;
@@ -349,8 +349,9 @@ async fn daemon_startup_falls_back_only_for_implicit_endpoints() -> color_eyre::
 fn daemon_eligibility_preserves_launch_options_and_explains_exclusions() {
     use clap::Parser;
     for (args, expected) in [
+        ("", Some("per-window default")),
         ("--no-daemon", Some("--no-daemon")),
-        ("--worktree", None),
+        ("--worktree", Some("per-window default")),
         ("--worktree --no-daemon", Some("--no-daemon")),
         ("--oss", Some("--oss")),
         ("--profile test", Some("--profile")),
@@ -361,7 +362,7 @@ fn daemon_eligibility_preserves_launch_options_and_explains_exclusions() {
         ),
         (
             "-m test --cd /tmp -i image.png -a never -s workspace-write --add-dir /tmp --no-alt-screen hello",
-            None,
+            Some("per-window default"),
         ),
     ] {
         let cli = Cli::parse_from(std::iter::once("codex").chain(args.split_whitespace()));
@@ -423,6 +424,37 @@ fn daemon_eligibility_preserves_launch_options_and_explains_exclusions() {
         ),
         None
     );
+}
+
+#[test]
+fn per_window_launch_policy_applies_to_new_resume_and_fork() -> color_eyre::Result<()> {
+    use clap::Parser;
+
+    let socket = AbsolutePathBuf::relative_to_current_dir("codex.sock")?;
+    for mode in ["new", "resume", "fork"] {
+        let mut cli = Cli::parse_from(["codex"]);
+        cli.resume_last = mode == "resume";
+        cli.fork_last = mode == "fork";
+        let exclusion = daemon_startup::exclusion(
+            &cli,
+            &[],
+            &LoaderOverrides::default(),
+            /*workload_identity_selected*/ false,
+            /*exec_server_url*/ None,
+        );
+        let target = app_server_target_for_launch(
+            /*explicit_remote_endpoint*/ None,
+            Some(socket.clone()),
+            exclusion.is_none(),
+            /*workload_identity_selected*/ false,
+            /*exec_server_url*/ None,
+        )?;
+        assert_eq!(
+            (exclusion, target),
+            (Some("per-window default"), AppServerTarget::Embedded)
+        );
+    }
+    Ok(())
 }
 
 #[test]

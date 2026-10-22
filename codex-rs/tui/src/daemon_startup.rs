@@ -1,7 +1,6 @@
-//! Local daemon launch policy. Explicit embedded launches never discover or start a daemon;
-//! optional attachment may fall back to embedded mode, while automatic launches
-//! require a compatible shared server and a successful connection, except when
-//! the Windows launcher forbids detaching a missing server.
+//! Local TUI launches use a per-window embedded backend, without daemon discovery or startup.
+//! Shared-server selection is reserved for explicit agents or remote launches. Transport and
+//! compatibility handling remain available for those explicitly selected shared connections.
 
 use super::*;
 use std::collections::BTreeMap;
@@ -14,6 +13,7 @@ const SERVER_FEATURES: [Feature; 4] = [
 ];
 
 pub(super) const FAILURE_HINT: &str = "To work without the background server, rerun the same command with --no-daemon (including resume or fork and its arguments).";
+pub(super) const PER_WINDOW_DEFAULT: &str = "per-window default";
 
 #[derive(Debug, thiserror::Error)]
 #[error("Cannot use the shared background server: {reason}.\n{FAILURE_HINT}")]
@@ -48,6 +48,7 @@ pub(super) fn exclusion(
             cli.strict_config,
             cli.bypass_hook_trust,
         )
+        .or(Some(PER_WINDOW_DEFAULT))
     }
 }
 

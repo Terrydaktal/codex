@@ -93,18 +93,19 @@ fn agents_navigation_hint_snapshots() {
         "agents_navigation_enabled",
         "agents_navigation_help",
         "agents_navigation_status",
+        "per_window_default_status",
     ] {
         snapshot_composer_state_with_width(
             name,
             /*width*/ 80,
             /*enhanced_keys_supported*/ false,
             |composer| {
-                composer.set_agents_navigation_enabled(/*enabled*/ true);
+                composer.set_agents_navigation_enabled(name != "per_window_default_status");
                 match name {
                     "agents_navigation_help" => {
                         composer.handle_key_event(KeyCode::Char('?').into());
                     }
-                    "agents_navigation_status" => {
+                    "agents_navigation_status" | "per_window_default_status" => {
                         composer.set_status_line_enabled(/*enabled*/ true);
                         composer.set_status_line(Some(Line::from("model · project")));
                     }

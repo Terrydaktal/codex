@@ -491,7 +491,8 @@ pub(super) async fn run_main_inner(
     } else {
         None
     };
-    let auto_start_daemon = config.features.enabled(Feature::DaemonAutoStart)
+    let auto_start_daemon = daemon_exclusion.is_none()
+        && config.features.enabled(Feature::DaemonAutoStart)
         && !cli.agents_overview
         && !cli.no_daemon
         && !app_server_target.uses_remote_workspace();
@@ -645,6 +646,7 @@ pub(super) async fn run_main_inner(
         (AppServerTarget::Remote { .. }, _) => "explicit_remote",
         _ if cli.agents_overview => "agents",
         (_, Some("--no-daemon")) => "explicit_no_daemon",
+        (_, Some(daemon_startup::PER_WINDOW_DEFAULT)) => "per_window_default",
         (_, Some(_)) => "incompatible_option",
         _ if auto_start_daemon => "auto_start",
         (AppServerTarget::LocalDaemon { .. }, _) => "existing_daemon",

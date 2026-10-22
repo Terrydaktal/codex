@@ -33,6 +33,7 @@ async fn connected_trust_cancellation_and_acceptance_control_task_creation() -> 
         std::fs::create_dir_all(socket.parent().unwrap())?;
         let listener = UnixListener::bind(socket.as_path())?;
         let cwd = repo_root.clone();
+        let server_home = codex_home.path().to_path_buf();
         let methods = Arc::new(Mutex::new(Vec::new()));
         let requests = Arc::clone(&methods);
         let server = tokio::spawn(async move {
@@ -44,6 +45,7 @@ async fn connected_trust_cancellation_and_acceptance_control_task_creation() -> 
                     .await
                     .expect("accept fake app-server client");
                 let cwd = cwd.clone();
+                let server_home = server_home.clone();
                 let methods = Arc::clone(&requests);
                 let trust_reads = Arc::clone(&trust_reads);
                 clients.spawn(async move {
@@ -70,7 +72,10 @@ async fn connected_trust_cancellation_and_acceptance_control_task_creation() -> 
                         };
                         methods.lock().unwrap().push(request.method.clone());
                         let result = match request.method.as_str() {
-                            "initialize" => json!({"userAgent": "trust-pty"}),
+                            "initialize" => json!({
+                                "userAgent": format!("trust-pty/{}", env!("CARGO_PKG_VERSION")),
+                                "codexHome": server_home, "platformFamily": "unix", "platformOs": std::env::consts::OS,
+                            }),
                             "experimentalFeature/list" => json!({"data": (["code_mode_host", "auth_elicitation"].map(|name| json!({
                                 "name": name, "stage": "stable", "displayName": null,
                                 "description": null, "announcement": null,
@@ -146,11 +151,9 @@ async fn connected_trust_cancellation_and_acceptance_control_task_creation() -> 
                 });
             }
         });
-        let mut terminal = PtyCodex::start(
-            &repo_root,
-            codex_home,
-            &["--no-alt-screen", "do not submit this launch prompt"],
-        )?;
+        let mut terminal =
+            PtyCodex::start_cli(&repo_root, codex_home, &["agents", "--no-alt-screen"])?;
+        // Explicit agents retains local-daemon folder semantics; --remote intentionally does not.
         let prompt = if trust_level.is_some() {
             "Open restricted"
         } else {

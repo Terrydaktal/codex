@@ -42,11 +42,10 @@ async fn automatic_reconnect_restores_draft_and_routes_new_notifications() -> Re
             "status": {"type": "active", "activeFlags": []}, "cwd": server_cwd,
             "cliVersion": "0.0.0", "source": "cli", "turns": [{"id": "running", "items": [], "status": "inProgress", "error": null}]
         });
-        // The first connection checks daemon compatibility before TUI startup.
-        for connection in -1..7 {
+        for connection in 0..7 {
             let mut socket = loop {
                 let (stream, _) = listener.accept().await?;
-                // Startup probes the default daemon socket before opening its WebSocket.
+                // Ignore any failed WebSocket handshake before the actual client connects.
                 if let Ok(socket) = tokio_tungstenite::accept_async(stream).await {
                     break socket;
                 }
@@ -152,7 +151,12 @@ async fn automatic_reconnect_restores_draft_and_routes_new_notifications() -> Re
         }
         Ok::<_, anyhow::Error>(methods)
     });
-    let mut terminal = PtyCodex::start(&repo_root, codex_home, &["--no-alt-screen"])?;
+    let endpoint = format!("unix://{}", socket.display());
+    let mut terminal = PtyCodex::start_cli(
+        &repo_root,
+        codex_home,
+        &["--remote", &endpoint, "--no-alt-screen"],
+    )?;
     terminal.wait_for_startup()?;
     let mut disconnect_tx = Some(disconnect_tx);
     let mut restore_tx = Some(restore_tx);

@@ -1,4 +1,4 @@
-//! Exercises daemon startup and excluded resume/fork pickers with Cargo's CLI executable.
+//! Exercises per-window startup and resume/fork pickers with Cargo's CLI executable.
 
 use anyhow::Context as _;
 use anyhow::Result;
@@ -10,37 +10,19 @@ use std::time::Duration;
 
 #[tokio::test]
 #[cfg(unix)]
-async fn auto_daemon_start_attaches_to_shared_server() -> Result<()> {
+async fn ordinary_launch_uses_a_per_window_backend() -> Result<()> {
     daemon_startup("start").await
 }
 
 #[tokio::test]
 #[cfg(unix)]
-async fn incompatible_daemon_can_cancel() -> Result<()> {
-    daemon_startup("mismatch-cancel").await
-}
-
-#[tokio::test]
-#[cfg(unix)]
-async fn incompatible_daemon_can_run_embedded() -> Result<()> {
+async fn local_launch_preserves_a_running_daemon_with_different_features() -> Result<()> {
     daemon_startup("mismatch-embedded").await
 }
 
 #[tokio::test]
 #[cfg(unix)]
-async fn incompatible_daemon_can_restart_with_confirmed_settings() -> Result<()> {
-    daemon_startup("mismatch-restart").await
-}
-
-#[tokio::test]
-#[cfg(unix)]
-async fn fresh_daemon_requires_confirmation_to_disable_shared_features() -> Result<()> {
-    daemon_startup("mismatch-disable").await
-}
-
-#[tokio::test]
-#[cfg(unix)]
-async fn stopped_daemon_requires_confirmation_to_disable_persisted_features() -> Result<()> {
+async fn local_feature_overrides_leave_stopped_daemon_settings_untouched() -> Result<()> {
     daemon_startup("mismatch-disable-persisted").await
 }
 
@@ -61,7 +43,7 @@ async fn daemon_auto_start_preserves_bedrock_onboarding() -> Result<()> {
 
 #[tokio::test]
 #[cfg(windows)]
-async fn restrictive_launcher_uses_embedded_if_daemon_cannot_start() -> Result<()> {
+async fn restrictive_launcher_uses_the_per_window_default() -> Result<()> {
     const CHILD: &str = "CODEX_TEST_RESTRICTIVE_DAEMON_START";
     if std::env::var_os(CHILD).is_some() {
         // The PTY creates its own breakaway-permitted job. Add Cargo's
@@ -122,7 +104,6 @@ async fn daemon_startup(command: &str) -> Result<()> {
     let mismatch = command.starts_with("mismatch-");
     let persisted = command == "mismatch-disable-persisted";
     let disabling = matches!(command, "mismatch-disable" | "mismatch-disable-persisted");
-    let restart = command == "mismatch-restart" || disabling;
     let bedrock_onboarding = matches!(command, "bedrock" | "bedrock-running");
     if !bedrock_onboarding {
         fs::write(
@@ -177,7 +158,7 @@ async fn daemon_startup(command: &str) -> Result<()> {
     }
     let pid_file = home.path().join("app-server-daemon/daemon.pid");
     let result = async {
-        let mut existing_daemon = if command == "bedrock-running" || (mismatch && !disabling) {
+        let existing_daemon = if command == "bedrock-running" || (mismatch && !disabling) {
             let started = Command::new(&codex)
                 .env_clear()
                 .envs(&env)
@@ -196,10 +177,10 @@ async fn daemon_startup(command: &str) -> Result<()> {
         let expected = if command == "start" {
             // The draft header is visible before the session's command composer is ready.
             steps.push_back(("GPT-5.6-Terra", b"/status\r"));
-            "Server:Localbackgroundserver"
+            "Model:"
         } else if command == "restrictive-job" {
-            steps.push_back(("GPT-5.6-Terra", b"\x14"));
-            "Runningwithoutthesharedbackgroundserver:thisWindowslauncher"
+            steps.push_back(("GPT-5.6-Terra", b"/status\r"));
+            "Model:"
         } else if mismatch {
             args.extend(if persisted {
                 ["--disable".into(), "api_key_model_discovery".into()]
@@ -208,32 +189,21 @@ async fn daemon_startup(command: &str) -> Result<()> {
             } else {
                 ["--enable".into(), "api_key_model_discovery".into()]
             });
-            let input: &[u8] = match command {
-                "mismatch-cancel" => b"\x03",
-                "mismatch-embedded" => b"1",
-                "mismatch-restart" | "mismatch-disable" | "mismatch-disable-persisted" => b"2\r",
-                _ => unreachable!(),
-            };
-            steps.push_back(("Backgroundserverhasincompatiblefeaturesettings", input));
-            if command == "mismatch-cancel" {
-                "--no-daemon"
-            } else {
-                steps.push_back(("GPT-5.6-Terra", b"/status\r"));
-                if restart { "Server:Localbackgroundserver" } else { "Model:" }
-            }
+            steps.push_back(("GPT-5.6-Terra", b"/status\r"));
+            "Model:"
         } else if bedrock_onboarding {
             "UseAmazonBedrock"
         } else {
             args.extend([command.into(), "--strict-config".into()]);
             steps.push_back(("Nosessionsyet", b"\x1b"));
-            steps.push_back(("GPT-5.6-Terra", b"\x14"));
-            "Runningwithoutthesharedbackgroundserver:--strict-config"
+            steps.push_back(("GPT-5.6-Terra", b"/status\r"));
+            "Model:"
         };
         let program = if cfg!(windows) && command == "restrictive-job" {
             env.insert("CODEX_TEST_RESTRICTIVE_DAEMON_START".into(), "1".into());
             args = vec![
                 "--exact".into(),
-                "restrictive_launcher_uses_embedded_if_daemon_cannot_start".into(),
+                "restrictive_launcher_uses_the_per_window_default".into(),
                 "--nocapture".into(),
             ];
             std::env::current_exe()?
@@ -253,7 +223,6 @@ async fn daemon_startup(command: &str) -> Result<()> {
             codex_utils_pty::ChildFds::Inherited(&[]),
         )
         .await?;
-        let mut exit = spawned.exit_rx;
         let session = spawned.session;
         let writer = session.writer_sender();
         let mut stdout = spawned.stdout_rx;
@@ -268,8 +237,7 @@ async fn daemon_startup(command: &str) -> Result<()> {
             ("\x1b]10;?", b"\x1b]10;rgb:ffff/ffff/ffff\x1b\\"),
             ("\x1b]11;?", b"\x1b]11;rgb:0000/0000/0000\x1b\\"),
         ];
-        // A fresh disable request includes both cold daemon startup and its confirmed restart.
-        let timeout = Duration::from_secs(if disabling { 90 } else { 45 });
+        let timeout = Duration::from_secs(45);
         let result = tokio::time::timeout(timeout, async {
             while let Some(bytes) = stdout.recv().await {
                 output.push_str(&String::from_utf8_lossy(&bytes));
@@ -286,54 +254,24 @@ async fn daemon_startup(command: &str) -> Result<()> {
                     .chars()
                     .filter(|c| !c.is_whitespace())
                     .collect();
-                if command == "restrictive-job"
-                    && text.contains("starttheWindowsdaemonfromanon-elevatedterminal")
-                {
-                    // Elevated runners must still reject startup before the job probe.
-                    ensure!(!pid_file.exists());
-                    let status = tokio::time::timeout(Duration::from_secs(/*secs*/ 5), &mut exit)
-                        .await??;
-                    ensure!(status != 0, "elevated daemon launch must fail");
-                    return Ok::<_, anyhow::Error>(());
-                }
                 if let Some((ready, input)) = steps.front()
                     && text.contains(ready)
                 {
-                    if disabling && *ready == "Backgroundserverhasincompatiblefeaturesettings" {
-                        existing_daemon = Some(fs::read(&pid_file)?);
-                        let settings: serde_json::Value = serde_json::from_slice(&fs::read(home.path().join("app-server-daemon/settings.json"))?)?;
-                        if persisted {
-                            ensure!(settings["featureOverrides"]["api_key_model_discovery"] == true);
-                        } else {
-                            ensure!(settings["featureOverrides"]["auth_elicitation"].is_null());
-                        }
-                    }
                     writer.send(input.to_vec()).await?;
                     steps.pop_front();
                     output.clear();
                 } else if steps.is_empty() && text.contains(expected) {
-                    if mismatch {
-                        let previous_pid = existing_daemon.as_ref().context("missing original daemon PID")?;
-                        ensure!((fs::read(&pid_file)? != *previous_pid) == restart);
-                        if command == "mismatch-cancel" {
-                            ensure!(text.contains("Cannotusethesharedbackgroundserver:Thissessionrequiresapi_key_model_discoverytobeenabled."));
-                        } else {
-                            ensure!(text.contains("Server:Localbackgroundserver") == restart);
-                        }
-                    } else if command == "start" {
-                        ensure!(text.contains("Server:Localbackgroundserver"));
-                        ensure!(home.path().join("app-server-daemon/daemon.pid").exists());
-                    } else if let Some(existing_daemon) = &existing_daemon {
+                    ensure!(!text.contains("Server:Localbackgroundserver"));
+                    if let Some(existing_daemon) = &existing_daemon {
                         ensure!(fs::read(&pid_file)? == *existing_daemon);
-                    } else if bedrock_onboarding || command == "restrictive-job" {
+                    } else {
                         ensure!(!pid_file.exists());
-                        if command == "restrictive-job" {
-                            let contents = screen.screen().contents();
-                            let warning = contents.lines()
-                                .find(|line| line.contains("Running without the shared background server:"))
-                                .context("missing rendered fallback warning")?;
-                            insta::assert_snapshot!("restrictive_launcher_warning", warning.trim());
-                        }
+                    }
+                    if persisted {
+                        let settings: serde_json::Value = serde_json::from_slice(&fs::read(
+                            home.path().join("app-server-daemon/settings.json"),
+                        )?)?;
+                        ensure!(settings["featureOverrides"]["api_key_model_discovery"] == true);
                     }
                     return Ok::<_, anyhow::Error>(());
                 }
@@ -344,13 +282,15 @@ async fn daemon_startup(command: &str) -> Result<()> {
             )
         })
         .await;
-        if command == "mismatch-cancel" && matches!(result, Ok(Ok(()))) {
-            let status = tokio::time::timeout(Duration::from_secs(/*secs*/ 5), exit).await??;
-            ensure!(status != 0, "incompatible daemon launch must fail");
-        }
         Ok::<_, anyhow::Error>((
             session,
-            result.with_context(|| format!("{command} timed out waiting for {}: {}", steps.front().map_or(expected, |(ready, _)| *ready), screen.screen().contents())),
+            result.with_context(|| {
+                format!(
+                    "{command} timed out waiting for {}: {}",
+                    steps.front().map_or(expected, |(ready, _)| *ready),
+                    screen.screen().contents()
+                )
+            }),
         ))
     }
     .await;
