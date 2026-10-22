@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::clipboard_copy::worker::CopyResult;
+use crate::clipboard_paste::MAX_CLIPBOARD_IMAGE_DATA_URL_BYTES;
 
 pub(super) enum PendingCopy {
     Message(u64, String),
@@ -11,23 +12,44 @@ pub(super) enum PendingCopy {
 
 impl ChatWidget {
     pub(crate) fn paste_image(&mut self) {
-        match paste_image_to_temp_png() {
-            Ok((path, info)) => {
-                tracing::debug!(
-                    "pasted image size={}x{} format={}",
-                    info.width,
-                    info.height,
-                    info.encoded_format.label()
-                );
-                self.attach_image(path);
-            }
-            Err(err) => {
-                tracing::warn!("failed to paste image: {err}");
-                self.add_to_history(history_cell::new_error_event(format!(
-                    "Failed to paste image: {err}",
-                )));
-            }
+        if let Err(err) = self.try_attach_clipboard_image() {
+            tracing::warn!("failed to paste image: {err}");
+            self.add_to_history(history_cell::new_error_event(format!(
+                "Failed to paste image: {err}",
+            )));
         }
+    }
+
+    pub(super) fn try_attach_clipboard_image(&mut self) -> Result<(), PasteImageError> {
+        let (url, info) = (self.clipboard_image_paster)()?;
+        if !self.current_model_supports_images() {
+            self.add_to_history(history_cell::new_warning_event(
+                self.image_inputs_not_supported_message(),
+            ));
+            self.request_redraw();
+            return Ok(());
+        }
+        if self.bottom_pane.has_active_view() {
+            return Ok(());
+        }
+        let urls = self.bottom_pane.remote_image_urls();
+        if urls.iter().map(String::len).sum::<usize>() + url.len()
+            > MAX_CLIPBOARD_IMAGE_DATA_URL_BYTES
+        {
+            return Err(PasteImageError::EncodeFailed(
+                "clipboard attachments exceed the 32 MiB transport limit".into(),
+            ));
+        }
+        tracing::debug!(
+            "pasted image size={}x{} format={}",
+            info.width,
+            info.height,
+            info.encoded_format.label()
+        );
+        self.bottom_pane.attach_clipboard_image(url);
+        self.refresh_startup_recovery();
+        self.request_redraw();
+        Ok(())
     }
 
     pub(super) fn show_clipboard_flash(&mut self, result: &CopyResult) {

@@ -1708,7 +1708,7 @@ impl TextArea {
         }
 
         // Update the cursor position to account for the edit.
-        self.cursor_pos = if self.cursor_pos < start {
+        self.cursor_pos = if self.cursor_pos <= start {
             self.cursor_pos
         } else if self.cursor_pos <= end {
             start + inserted_len
@@ -2299,6 +2299,10 @@ impl TextArea {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "textarea/image_label_tests.rs"]
+mod image_label_tests;
 
 #[cfg(test)]
 mod tests {

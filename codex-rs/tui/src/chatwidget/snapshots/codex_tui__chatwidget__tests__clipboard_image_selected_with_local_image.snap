@@ -1,0 +1,7 @@
+---
+source: tui/src/chatwidget/tests/clipboard_image_tests.rs
+expression: "normalize_snapshot_paths(render_bottom_popup(&chat, 80))"
+---
+› [Image #2][Image #1]
+
+  GPT-5.6-Sol default · /tmp/project

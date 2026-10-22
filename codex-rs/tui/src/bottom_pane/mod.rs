@@ -1207,6 +1207,13 @@ impl BottomPane {
         self.composer.remote_image_urls()
     }
 
+    pub(crate) fn attach_clipboard_image(&mut self, url: String) {
+        if !self.has_active_view() {
+            self.composer.attach_clipboard_image(url);
+            self.request_redraw();
+        }
+    }
+
     pub(crate) fn take_remote_image_urls(&mut self) -> Vec<String> {
         let urls = self.composer.take_remote_image_urls();
         self.request_redraw();
@@ -2131,6 +2138,7 @@ impl BottomPane {
         self.request_redraw();
     }
 
+    #[cfg(test)]
     pub(crate) fn attach_image(&mut self, path: PathBuf) {
         if !self.has_active_view() {
             self.composer.attach_image(path);

@@ -137,11 +137,10 @@ impl AttachmentState {
             .collect()
     }
 
-    pub(super) fn remote_image_lines(&self) -> Vec<Line<'static>> {
-        self.remote_image_urls
-            .iter()
-            .enumerate()
-            .map(|(index, _)| {
+    pub(super) fn remote_image_lines(&self, textarea: &TextArea) -> Vec<Line<'static>> {
+        self.remote_row_indices(textarea)
+            .into_iter()
+            .map(|index| {
                 let label = local_image_label_text(index + 1);
                 if self.selected_remote_image_index == Some(index) {
                     label.cyan().reversed().into()
@@ -164,17 +163,26 @@ impl AttachmentState {
         if self.remote_image_urls.is_empty()
             || key_event.modifiers != KeyModifiers::NONE
             || key_event.kind != KeyEventKind::Press
+            || !matches!(
+                key_event.code,
+                KeyCode::Up | KeyCode::Down | KeyCode::Delete | KeyCode::Backspace
+            )
         {
+            return None;
+        }
+        let rows = self.remote_row_indices(textarea);
+        if rows.is_empty() {
             return None;
         }
 
         match key_event.code {
             KeyCode::Up => {
                 if let Some(selected) = self.selected_remote_image_index {
-                    self.selected_remote_image_index = Some(selected.saturating_sub(1));
+                    let position = rows.iter().position(|index| *index == selected)?;
+                    self.selected_remote_image_index = Some(rows[position.saturating_sub(1)]);
                     Some((InputResult::None, true))
                 } else if textarea.cursor() == 0 {
-                    self.selected_remote_image_index = Some(self.remote_image_urls.len() - 1);
+                    self.selected_remote_image_index = rows.last().copied();
                     Some((InputResult::None, true))
                 } else {
                     None
@@ -182,11 +190,8 @@ impl AttachmentState {
             }
             KeyCode::Down => {
                 if let Some(selected) = self.selected_remote_image_index {
-                    if selected + 1 < self.remote_image_urls.len() {
-                        self.selected_remote_image_index = Some(selected + 1);
-                    } else {
-                        self.clear_remote_image_selection();
-                    }
+                    let position = rows.iter().position(|index| *index == selected)?;
+                    self.selected_remote_image_index = rows.get(position + 1).copied();
                     Some((InputResult::None, true))
                 } else {
                     None
@@ -223,7 +228,27 @@ impl AttachmentState {
     }
 
     pub(super) fn relabel_local_images(&mut self, textarea: &mut TextArea) {
-        for (index, image) in self.local_images.iter_mut().enumerate() {
+        // Increasing the remote prefix shifts labels right. Rename backwards so
+        // an old [Image #2] cannot be confused with the newly renamed [Image #1].
+        let increasing = self
+            .local_images
+            .first()
+            .and_then(|image| {
+                image
+                    .placeholder
+                    .strip_prefix("[Image #")?
+                    .strip_suffix(']')?
+                    .parse::<usize>()
+                    .ok()
+            })
+            .is_some_and(|first| first < self.remote_image_urls.len() + 1);
+        for step in 0..self.local_images.len() {
+            let index = if increasing {
+                self.local_images.len() - step - 1
+            } else {
+                step
+            };
+            let image = &mut self.local_images[index];
             let expected = local_image_label_text(self.remote_image_urls.len() + index + 1);
             if image.placeholder == expected {
                 continue;
@@ -240,12 +265,12 @@ impl AttachmentState {
             return;
         }
 
-        self.remote_image_urls.remove(selected_index);
-        self.selected_remote_image_index = if self.remote_image_urls.is_empty() {
-            None
-        } else {
-            Some(selected_index.min(self.remote_image_urls.len() - 1))
-        };
-        self.relabel_local_images(textarea);
+        self.remove_remote_image(selected_index, textarea);
+        let rows = self.remote_row_indices(textarea);
+        self.selected_remote_image_index = rows
+            .iter()
+            .copied()
+            .find(|index| *index >= selected_index)
+            .or_else(|| rows.last().copied());
     }
 }

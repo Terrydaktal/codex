@@ -250,24 +250,6 @@ impl ChatWidget {
         KeyEventAction::None
     }
 
-    /// Attach a local image to the composer when the active model supports image inputs.
-    ///
-    /// When the model does not advertise image support, we keep the draft unchanged and surface a
-    /// warning event so users can switch models or remove attachments.
-    pub(crate) fn attach_image(&mut self, path: PathBuf) {
-        if !self.current_model_supports_images() {
-            self.add_to_history(history_cell::new_warning_event(
-                self.image_inputs_not_supported_message(),
-            ));
-            self.request_redraw();
-            return;
-        }
-        tracing::info!("attach_image path={path:?}");
-        self.bottom_pane.attach_image(path);
-        self.refresh_startup_recovery();
-        self.request_redraw();
-    }
-
     pub(crate) fn composer_text_with_pending(&self) -> String {
         self.bottom_pane.composer_text_with_pending()
     }
@@ -469,25 +451,18 @@ impl ChatWidget {
         if !self.startup_submission_has_protected_input() {
             self.cancel_startup_submission();
         }
-        if self.bottom_pane.no_modal_or_popup_active() && self.try_attach_clipboard_image().is_ok()
-        {
-            self.refresh_startup_recovery();
-            return;
+        if self.bottom_pane.no_modal_or_popup_active() {
+            match self.try_attach_clipboard_image() {
+                Ok(()) => return,
+                Err(err @ PasteImageError::EncodeFailed(_)) => {
+                    self.add_error_message(format!("Failed to paste image: {err}"));
+                    return;
+                }
+                Err(PasteImageError::ClipboardUnavailable(_) | PasteImageError::NoImage(_)) => {}
+            }
         }
         self.bottom_pane.handle_paste(text);
         self.refresh_startup_recovery();
-    }
-
-    fn try_attach_clipboard_image(&mut self) -> Result<(), PasteImageError> {
-        let (path, info) = (self.clipboard_image_paster)()?;
-        tracing::debug!(
-            "pasted image size={}x{} format={}",
-            info.width,
-            info.height,
-            info.encoded_format.label()
-        );
-        self.attach_image(path);
-        Ok(())
     }
 
     // Returns true if caller should skip rendering this frame (a future frame is scheduled).

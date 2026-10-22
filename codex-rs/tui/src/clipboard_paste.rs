@@ -1,17 +1,20 @@
 //! Read clipboard images and text on the TUI host. Text reads run on the clipboard worker.
+//! Images are captured as inline PNG data URLs, never as borrowed paths or temporary files.
 
 pub(crate) mod text;
 
+use base64::Engine;
 use std::path::Path;
 use std::path::PathBuf;
-use tempfile::Builder;
+
+// Leave headroom below the WebSocket server's 64 MiB message limit.
+pub(crate) const MAX_CLIPBOARD_IMAGE_DATA_URL_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum PasteImageError {
     ClipboardUnavailable(String),
     NoImage(String),
     EncodeFailed(String),
-    IoError(String),
 }
 
 impl std::fmt::Display for PasteImageError {
@@ -20,7 +23,6 @@ impl std::fmt::Display for PasteImageError {
             PasteImageError::ClipboardUnavailable(msg) => write!(f, "clipboard unavailable: {msg}"),
             PasteImageError::NoImage(msg) => write!(f, "no image on clipboard: {msg}"),
             PasteImageError::EncodeFailed(msg) => write!(f, "could not encode image: {msg}"),
-            PasteImageError::IoError(msg) => write!(f, "io error: {msg}"),
         }
     }
 }
@@ -43,7 +45,7 @@ impl EncodedImageFormat {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PastedImageInfo {
     pub width: u32,
     pub height: u32,
@@ -120,30 +122,25 @@ pub fn paste_image_as_png() -> Result<(Vec<u8>, PastedImageInfo), PasteImageErro
     ))
 }
 
-/// Convenience: write to a temp file and return its path + info.
-#[cfg(not(target_os = "android"))]
-pub fn paste_image_to_temp_png() -> Result<(PathBuf, PastedImageInfo), PasteImageError> {
+/// Capture the clipboard once and own the image through submission and draft restoration.
+pub fn paste_image_as_data_url() -> Result<(String, PastedImageInfo), PasteImageError> {
     // First attempt: read image from system clipboard via arboard (native paths or image data).
     match paste_image_as_png() {
         Ok((png, info)) => {
-            // Create a unique temporary file with a .png suffix to avoid collisions.
-            let tmp = Builder::new()
-                .prefix("codex-clipboard-")
-                .suffix(".png")
-                .tempfile()
-                .map_err(|e| PasteImageError::IoError(e.to_string()))?;
-            std::fs::write(tmp.path(), &png)
-                .map_err(|e| PasteImageError::IoError(e.to_string()))?;
-            // Persist the file (so it remains after the handle is dropped) and return its PathBuf.
-            let (_file, path) = tmp
-                .keep()
-                .map_err(|e| PasteImageError::IoError(e.error.to_string()))?;
-            Ok((path, info))
+            if png.len().div_ceil(3) * 4 + "data:image/png;base64,".len()
+                > MAX_CLIPBOARD_IMAGE_DATA_URL_BYTES
+            {
+                return Err(PasteImageError::EncodeFailed(
+                    "clipboard image exceeds the 32 MiB transport limit".into(),
+                ));
+            }
+            let encoded = base64::engine::general_purpose::STANDARD.encode(png);
+            Ok((format!("data:image/png;base64,{encoded}"), info))
         }
         Err(e) => {
             #[cfg(target_os = "linux")]
             {
-                try_wsl_clipboard_fallback(&e).or(Err(e))
+                try_wsl_clipboard_fallback(&e)
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -157,12 +154,11 @@ pub fn paste_image_to_temp_png() -> Result<(PathBuf, PastedImageInfo), PasteImag
 ///
 /// If clipboard is unavailable (common under WSL because arboard cannot access
 /// the Windows clipboard), attempt a WSL fallback that calls PowerShell on the
-/// Windows side to write the clipboard image to a temporary file, then return
-/// the corresponding WSL path.
+/// Windows side to encode the clipboard image in memory and return its bytes.
 #[cfg(target_os = "linux")]
 fn try_wsl_clipboard_fallback(
     error: &PasteImageError,
-) -> Result<(PathBuf, PastedImageInfo), PasteImageError> {
+) -> Result<(String, PastedImageInfo), PasteImageError> {
     use PasteImageError::ClipboardUnavailable;
     use PasteImageError::NoImage;
 
@@ -171,40 +167,57 @@ fn try_wsl_clipboard_fallback(
     }
 
     tracing::debug!("attempting Windows PowerShell clipboard fallback");
-    let Some(win_path) = try_dump_windows_clipboard_image() else {
+    let Some(encoded) = try_read_windows_clipboard_image()? else {
         return Err(error.clone());
     };
 
-    tracing::debug!("powershell produced path: {}", win_path);
-    let Some(mapped_path) = convert_windows_path_to_wsl(&win_path) else {
-        return Err(error.clone());
-    };
+    decode_windows_clipboard_image(&encoded)
+}
 
-    let Ok((w, h)) = image::image_dimensions(&mapped_path) else {
-        return Err(error.clone());
-    };
-
-    // Return the mapped path directly without copying.
-    // The file will be read and base64-encoded during serialization.
+#[cfg(target_os = "linux")]
+fn decode_windows_clipboard_image(
+    encoded: &str,
+) -> Result<(String, PastedImageInfo), PasteImageError> {
+    let encoded = encoded.trim();
+    if encoded.len() + "data:image/png;base64,".len() > MAX_CLIPBOARD_IMAGE_DATA_URL_BYTES {
+        return Err(PasteImageError::EncodeFailed(
+            "clipboard image exceeds the 32 MiB transport limit".into(),
+        ));
+    }
+    let png = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|e| PasteImageError::EncodeFailed(e.to_string()))?;
+    let (width, height) =
+        image::ImageReader::with_format(std::io::Cursor::new(png), image::ImageFormat::Png)
+            .into_dimensions()
+            .map_err(|e| PasteImageError::EncodeFailed(e.to_string()))?;
     Ok((
-        mapped_path,
+        format!("data:image/png;base64,{encoded}"),
         PastedImageInfo {
-            width: w,
-            height: h,
+            width,
+            height,
             encoded_format: EncodedImageFormat::Png,
         },
     ))
 }
 
-/// Try to call a Windows PowerShell command (several common names) to save the
-/// clipboard image to a temporary PNG and return the Windows path to that file.
+/// Try a Windows PowerShell command to return the clipboard PNG as base64.
 /// Returns None if no command succeeded or no image was present.
 #[cfg(target_os = "linux")]
-fn try_dump_windows_clipboard_image() -> Option<String> {
-    // Powershell script: save image from clipboard to a temp png and print the path.
-    // Force UTF-8 output to avoid encoding issues between powershell.exe (UTF-16LE default)
-    // and pwsh (UTF-8 default).
-    let script = r#"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $img = Get-Clipboard -Format Image; if ($img -ne $null) { $p=[System.IO.Path]::GetTempFileName(); $p = [System.IO.Path]::ChangeExtension($p,'png'); $img.Save($p,[System.Drawing.Imaging.ImageFormat]::Png); Write-Output $p } else { exit 1 }"#;
+fn try_read_windows_clipboard_image() -> Result<Option<String>, PasteImageError> {
+    // Use stdout instead of a Windows temp file. Never log the image payload.
+    let script = r#"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8;
+$img = Get-Clipboard -Format Image;
+if ($null -eq $img) { exit 1 }
+$stream = [System.IO.MemoryStream]::new();
+try {
+    $img.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png);
+    if ($stream.Length -gt 24MB) { exit 2 }
+    [Console]::Write([Convert]::ToBase64String($stream.ToArray()));
+} finally {
+    $stream.Dispose();
+    $img.Dispose();
+}"#;
 
     for cmd in ["powershell.exe", "pwsh", "powershell"] {
         match std::process::Command::new(cmd)
@@ -215,11 +228,15 @@ fn try_dump_windows_clipboard_image() -> Option<String> {
             Ok(output) => {
                 if output.status.success() {
                     // Decode as UTF-8 (forced by the script above).
-                    let win_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !win_path.is_empty() {
-                        tracing::debug!("{} saved clipboard image to {}", cmd, win_path);
-                        return Some(win_path);
+                    let encoded = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !encoded.is_empty() {
+                        tracing::debug!("{} read clipboard image", cmd);
+                        return Ok(Some(encoded));
                     }
+                } else if output.status.code() == Some(2) {
+                    return Err(PasteImageError::EncodeFailed(
+                        "clipboard image exceeds the 32 MiB transport limit".into(),
+                    ));
                 } else {
                     tracing::debug!("{} returned non-zero status", cmd);
                 }
@@ -229,16 +246,12 @@ fn try_dump_windows_clipboard_image() -> Option<String> {
             }
         }
     }
-    None
+    Ok(None)
 }
 
-#[cfg(target_os = "android")]
-pub fn paste_image_to_temp_png() -> Result<(PathBuf, PastedImageInfo), PasteImageError> {
-    // Keep error consistent with paste_image_as_png.
-    Err(PasteImageError::ClipboardUnavailable(
-        "clipboard image paste is unsupported on Android".into(),
-    ))
-}
+#[cfg(all(test, target_os = "linux"))]
+#[path = "clipboard_paste_image_tests.rs"]
+mod image_tests;
 
 /// Normalize pasted text for a single-line search query.
 pub(crate) fn normalize_pasted_search_query(pasted: &str) -> Option<String> {

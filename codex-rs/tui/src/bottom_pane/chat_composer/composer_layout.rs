@@ -112,7 +112,7 @@ impl ChatComposer {
         ));
         let remote_images_height = self
             .attachments
-            .remote_image_lines()
+            .remote_image_lines(&self.draft.textarea)
             .len()
             .try_into()
             .unwrap_or(u16::MAX)
@@ -178,7 +178,7 @@ impl ChatComposer {
             width.saturating_sub(COLS_WITH_MARGIN.saturating_add(options.textarea_right_reserve));
         let remote_images_height: u16 = self
             .attachments
-            .remote_image_lines()
+            .remote_image_lines(&self.draft.textarea)
             .len()
             .try_into()
             .unwrap_or(u16::MAX);

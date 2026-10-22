@@ -212,8 +212,10 @@
 //! # Remote Image Rows (Up/Down/Delete)
 //!
 //! Remote image URLs are rendered as non-editable `[Image #N]` rows above the textarea (inside the
-//! same composer block). These rows represent image attachments rehydrated from app-server/backtrack
-//! history; TUI users can remove them, but cannot type into that row region.
+//! same composer block). These rows hold captured clipboard PNG data URLs as well as attachments
+//! rehydrated from app-server/backtrack history. Clipboard images remain owned by the draft through
+//! queueing and restoration, without temporary files. Users can remove rows, but cannot type into
+//! that row region.
 //!
 //! Keyboard behavior:
 //!
@@ -227,6 +229,9 @@
 //! - Remote rows occupy `[Image #1]..[Image #M]`.
 //! - Local placeholders are offset after that range (`[Image #M+1]..`).
 //! - Deleting a remote row relabels local placeholders to keep numbering contiguous.
+//! - Newly pasted clipboard bytes stay in URL transport but insert an atomic image
+//!   placeholder at the cursor, just like dropped files. Their matching URL is
+//!   removed when that placeholder is deleted; they do not also render as rows.
 //!
 //! # Non-bracketed Paste Bursts
 //!
@@ -380,6 +385,7 @@ mod composer_layout;
 mod draft_state;
 mod footer_state;
 mod history_search;
+mod inline_images;
 mod inline_input;
 mod mouse;
 mod paste_input;
@@ -1249,6 +1255,7 @@ impl ChatComposer {
     /// are renumbered to `[Image #M+1]..[Image #N]` (where `M` is the number of
     /// remote images). Cursor is placed at the end after rebuilding elements.
     pub(crate) fn apply_external_edit(&mut self, text: String) {
+        let inline_images = self.attachments.inline_image_labels(&self.draft.textarea);
         self.note_sparkle_replaced_text(&text);
         self.vim_history = VimHistory::default();
         self.draft.pending_pastes.clear();
@@ -1261,6 +1268,7 @@ impl ChatComposer {
             .local_images
             .iter()
             .map(|image| &image.placeholder)
+            .chain(inline_images.iter())
         {
             if placeholder_counts.contains_key(placeholder) {
                 continue;
@@ -1288,6 +1296,9 @@ impl ChatComposer {
         let mut remaining: HashMap<&str, usize> = HashMap::new();
         for img in &self.attachments.local_images {
             *remaining.entry(img.placeholder.as_str()).or_insert(0) += 1;
+        }
+        for label in &inline_images {
+            remaining.insert(label.as_str(), 1);
         }
 
         let mut occurrences: Vec<(usize, &str)> = Vec::new();
@@ -1317,6 +1328,12 @@ impl ChatComposer {
             self.draft.textarea.insert_str_at(idx, &text[idx..]);
         }
 
+        let removed_inline_images = inline_images
+            .into_iter()
+            .filter(|label| !text.contains(label))
+            .collect::<Vec<_>>();
+        self.attachments
+            .remove_deleted_inline_images(&removed_inline_images, &mut self.draft.textarea);
         // Keep local image placeholders normalized in attachment order after the
         // remote-image prefix.
         self.attachments
@@ -3793,6 +3810,8 @@ impl ChatComposer {
         }
         self.attachments
             .remove_deleted_local_placeholders(&removed_payloads, &mut self.draft.textarea);
+        self.attachments
+            .remove_deleted_inline_images(&removed_payloads, &mut self.draft.textarea);
     }
 
     /// Handle empty-prompt agents navigation and shortcut-overlay toggling or dismissal.
@@ -4925,7 +4944,7 @@ impl ChatComposer {
         let style = user_message_style();
         Block::default().style(style).render(composer_rect, buf);
         if !remote_images_rect.is_empty() {
-            Paragraph::new(self.attachments.remote_image_lines())
+            Paragraph::new(self.attachments.remote_image_lines(&self.draft.textarea))
                 .style(style)
                 .render(remote_images_rect, buf);
         }

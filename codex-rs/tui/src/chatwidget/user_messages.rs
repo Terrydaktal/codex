@@ -32,11 +32,9 @@ use super::ChatWidget;
 pub(crate) struct UserMessage {
     pub(crate) text: String,
     pub(crate) local_images: Vec<LocalImageAttachment>,
-    /// Remote image attachments represented as URLs (for example data URLs)
-    /// provided by app-server clients.
-    ///
-    /// Unlike `local_images`, these are not created by TUI image attach/paste
-    /// flows. The TUI can restore and remove them while editing/backtracking.
+    /// Inline image attachments, including captured clipboard data URLs and URLs
+    /// provided by app-server clients. The TUI can restore and remove them while
+    /// editing/backtracking without reopening a clipboard image file.
     pub(crate) remote_image_urls: Vec<String>,
     pub(crate) text_elements: Vec<TextElement>,
     pub(crate) mention_bindings: Vec<MentionBinding>,
@@ -343,6 +341,7 @@ fn remap_placeholders_for_message_and_history_record(
     message: UserMessage,
     history_record: UserMessageHistoryRecord,
     next_label: &mut usize,
+    remote_offset: usize,
 ) -> (UserMessage, UserMessageHistoryRecord) {
     let UserMessage {
         text,
@@ -351,7 +350,16 @@ fn remap_placeholders_for_message_and_history_record(
         remote_image_urls,
         mention_bindings,
     } = message;
-    let (mapping, remapped_images) = build_placeholder_mapping(local_images, next_label);
+    let (mut mapping, remapped_images) = build_placeholder_mapping(local_images, next_label);
+    // Clipboard images also have inline placeholders. Each queued draft starts
+    // its remote range at one, while the combined turn has one shared range.
+    for (index, url) in remote_image_urls.iter().enumerate() {
+        if url.starts_with("data:image/") {
+            mapping
+                .entry(local_image_label_text(index + 1))
+                .or_insert_with(|| local_image_label_text(remote_offset + index + 1));
+        }
+    }
     let (text, text_elements) = remap_placeholders_in_text(text, text_elements, &mapping);
     let history_record = match history_record {
         UserMessageHistoryRecord::Override(history) if !history.text.is_empty() => {
@@ -386,6 +394,7 @@ pub(super) fn remap_placeholders_for_message(
         message,
         UserMessageHistoryRecord::UserMessageText,
         next_label,
+        /*remote_offset*/ 0,
     )
     .0
 }
@@ -398,14 +407,19 @@ fn remap_user_messages_with_history_records(
         .map(|(message, _)| message.remote_image_urls.len())
         .sum::<usize>();
     let mut next_image_label = total_remote_images + 1;
+    let mut remote_offset = 0;
     messages
         .into_iter()
         .map(|(message, history_record)| {
-            remap_placeholders_for_message_and_history_record(
+            let next_remote_offset = remote_offset + message.remote_image_urls.len();
+            let remapped = remap_placeholders_for_message_and_history_record(
                 message,
                 history_record,
                 &mut next_image_label,
-            )
+                remote_offset,
+            );
+            remote_offset = next_remote_offset;
+            remapped
         })
         .collect()
 }

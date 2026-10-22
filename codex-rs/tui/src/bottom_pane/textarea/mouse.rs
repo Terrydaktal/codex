@@ -63,7 +63,7 @@ impl TextArea {
         (!range.is_empty()).then_some(range)
     }
 
-    pub(super) fn delete_mouse_selection(&mut self) -> bool {
+    pub(crate) fn delete_mouse_selection(&mut self) -> bool {
         let Some(range) = self.mouse_selection_range() else {
             return false;
         };
